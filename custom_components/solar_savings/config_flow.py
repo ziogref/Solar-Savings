@@ -24,10 +24,11 @@ class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         # Define the form schema: Name (string) and Value (float)
+        # vol.Coerce(float) ensures that if the UI sends "123.45" as a string, it gets converted to a float.
         data_schema = vol.Schema(
             {
                 vol.Required("test_name", default="Test Entity"): str,
-                vol.Required("test_value", default=69420.0): float,
+                vol.Required("test_value", default=69420.0): vol.Coerce(float),
             }
         )
 
