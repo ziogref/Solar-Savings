@@ -1,0 +1,18 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Solar Savings Configuration",
+        "description": "Set up your test entity",
+        "data": {
+          "test_name": "Entity Name",
+          "test_value": "Initial Value (AUD)"
+        }
+      }
+    },
+    "error": {},
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  }
+}
