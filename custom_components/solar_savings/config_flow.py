@@ -4,6 +4,7 @@ from __future__ import annotations
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
+from homeassistant.helpers import selector
 
 from .const import DOMAIN
 
@@ -28,9 +29,12 @@ class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data=user_input
             )
 
-        # Define the form schema: Only Rate fields now
+        # Define the form schema: Rate fields + Schedule Selector
         data_schema = vol.Schema(
             {
+                vol.Required("peak_schedule"): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="schedule")
+                ),
                 vol.Optional("on_peak_rate", default=0.0): vol.Coerce(float),
                 vol.Optional("off_peak_rate", default=0.0): vol.Coerce(float),
             }
@@ -52,16 +56,22 @@ class SolarSavingsOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # Get current values from options, falling back to initial data, falling back to 0.0
+        # Get current values
         current_on_peak = self.config_entry.options.get(
             "on_peak_rate", self.config_entry.data.get("on_peak_rate", 0.0)
         )
         current_off_peak = self.config_entry.options.get(
             "off_peak_rate", self.config_entry.data.get("off_peak_rate", 0.0)
         )
+        current_schedule = self.config_entry.options.get(
+            "peak_schedule", self.config_entry.data.get("peak_schedule")
+        )
 
         schema = vol.Schema(
             {
+                vol.Optional("peak_schedule", description={"suggested_value": current_schedule}): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="schedule")
+                ),
                 vol.Optional("on_peak_rate", default=current_on_peak): vol.Coerce(float),
                 vol.Optional("off_peak_rate", default=current_off_peak): vol.Coerce(float),
             }

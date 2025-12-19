@@ -19,15 +19,26 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Solar Savings sensors."""
     
-    # Retrieve options (updated via configure menu or scheduler), fallback to data, fallback to 0.0
+    # Get current values
     on_peak = entry.options.get("on_peak_rate", entry.data.get("on_peak_rate", 0.0))
     off_peak = entry.options.get("off_peak_rate", entry.data.get("off_peak_rate", 0.0))
+    active_schedule = entry.options.get("peak_schedule", entry.data.get("peak_schedule", "None"))
 
     entities = []
 
-    # 1. On Peak Rate Sensor
+    # 1. Active Schedule Name (Text Sensor for confidence check)
     entities.append(
-        SolarSavingsSensor(
+        SolarSavingsTextSensor(
+            name="Active Schedule",
+            value=active_schedule,
+            entry_id=entry.entry_id,
+            icon="mdi:calendar-check"
+        )
+    )
+
+    # 2. On Peak Rate Sensor
+    entities.append(
+        SolarSavingsRateSensor(
             name="On Peak Rate",
             value=on_peak,
             entry_id=entry.entry_id,
@@ -35,9 +46,9 @@ async def async_setup_entry(
         )
     )
 
-    # 2. Off Peak Rate Sensor
+    # 3. Off Peak Rate Sensor
     entities.append(
-        SolarSavingsSensor(
+        SolarSavingsRateSensor(
             name="Off Peak Rate",
             value=off_peak,
             entry_id=entry.entry_id,
@@ -48,24 +59,37 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class SolarSavingsSensor(SensorEntity):
-    """Representation of a Solar Savings Sensor."""
+class SolarSavingsTextSensor(SensorEntity):
+    """Representation of a text sensor (e.g. Active Schedule Name)."""
+    
+    _attr_has_entity_name = True
+
+    def __init__(self, name: str, value: str, entry_id: str, icon: str) -> None:
+        self._attr_name = name
+        self._attr_native_value = value
+        self._entry_id = entry_id
+        self._attr_icon = icon
+        self._attr_unique_id = f"{entry_id}_{name.lower().replace(' ', '_')}"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry_id)},
+            name="Solar Savings",
+            manufacturer="Solar Savings Integration",
+            model="Savings Calculator",
+        )
+
+
+class SolarSavingsRateSensor(SensorEntity):
+    """Representation of a Numeric Rate Sensor."""
 
     _attr_has_entity_name = True
-    # We use MEASUREMENT so it graphs as a continuous line
-    # We do NOT use device_class="monetary" because HA enforces "TOTAL" state class for monetary
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "c/kWh"
     _attr_icon = "mdi:currency-usd"
 
-    def __init__(
-        self, 
-        name: str, 
-        value: float, 
-        entry_id: str, 
-        unique_suffix: str
-    ) -> None:
-        """Initialize the sensor."""
+    def __init__(self, name: str, value: float, entry_id: str, unique_suffix: str) -> None:
         self._attr_name = name
         self._attr_native_value = value
         self._entry_id = entry_id
@@ -73,7 +97,6 @@ class SolarSavingsSensor(SensorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        """Return device information about this entity."""
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
             name="Solar Savings",

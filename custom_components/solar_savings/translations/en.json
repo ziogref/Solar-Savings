@@ -3,8 +3,9 @@
     "step": {
       "user": {
         "title": "Solar Savings Configuration",
-        "description": "Set up your energy rates",
+        "description": "Select your Schedule Helper and Rates.\n\n(Create a Schedule Helper in Settings > Devices & Services > Helpers first)",
         "data": {
+          "peak_schedule": "Peak Tariff Schedule",
           "on_peak_rate": "On Peak Rate (c/kWh)",
           "off_peak_rate": "Off Peak Rate (c/kWh)"
         }
@@ -18,8 +19,9 @@
   "options": {
     "step": {
       "init": {
-        "title": "Update Rates",
+        "title": "Update Configuration",
         "data": {
+          "peak_schedule": "Peak Tariff Schedule",
           "on_peak_rate": "On Peak Rate (c/kWh)",
           "off_peak_rate": "Off Peak Rate (c/kWh)"
         }
