@@ -20,48 +20,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Solar Savings sensors."""
     
-    # Retrieve data from the config entry (initial setup)
-    name = entry.data.get("test_name", "Test Entity")
-    value = entry.data.get("test_value", 0.0)
-    
-    # Retrieve options (updated via configure menu), fallback to data, fallback to 0.0
-    on_peak = entry.options.get("on_peak_rate", entry.data.get("on_peak_rate", 0.0))
-    off_peak = entry.options.get("off_peak_rate", entry.data.get("off_peak_rate", 0.0))
-
+    # Currently we have moved the rate inputs to number.py
+    # This file is reserved for future calculated sensors (like Total Savings)
     entities = []
 
-    # 1. Main Test Sensor
-    entities.append(
-        SolarSavingsSensor(
-            name=name,
-            value=value,
-            entry_id=entry.entry_id,
-            sensor_type="total",
-            unique_suffix="test_entity"
-        )
-    )
-
-    # 2. On Peak Rate Sensor
-    entities.append(
-        SolarSavingsSensor(
-            name="On Peak Rate",
-            value=on_peak,
-            entry_id=entry.entry_id,
-            sensor_type="rate",
-            unique_suffix="on_peak_rate"
-        )
-    )
-
-    # 3. Off Peak Rate Sensor
-    entities.append(
-        SolarSavingsSensor(
-            name="Off Peak Rate",
-            value=off_peak,
-            entry_id=entry.entry_id,
-            sensor_type="rate",
-            unique_suffix="off_peak_rate"
-        )
-    )
+    # logic for future sensors will go here...
     
     async_add_entities(entities)
 
@@ -76,7 +39,6 @@ class SolarSavingsSensor(SensorEntity):
         name: str, 
         value: float, 
         entry_id: str, 
-        sensor_type: str, 
         unique_suffix: str
     ) -> None:
         """Initialize the sensor."""
@@ -85,18 +47,10 @@ class SolarSavingsSensor(SensorEntity):
         self._entry_id = entry_id
         self._attr_unique_id = f"{entry_id}_{unique_suffix}"
         
-        # Configure attributes based on the type of sensor
-        if sensor_type == "rate":
-            self._attr_native_unit_of_measurement = "c/kWh"
-            self._attr_icon = "mdi:currency-usd"
-            self._attr_device_class = SensorDeviceClass.MONETARY
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-        else:
-            # Default/Test entity
-            self._attr_native_unit_of_measurement = "AUD"
-            self._attr_icon = "mdi:cash"
-            self._attr_device_class = SensorDeviceClass.MONETARY
-            self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_native_unit_of_measurement = "AUD"
+        self._attr_icon = "mdi:cash"
+        self._attr_device_class = SensorDeviceClass.MONETARY
+        self._attr_state_class = SensorStateClass.TOTAL
 
     @property
     def device_info(self) -> DeviceInfo:

@@ -7,16 +7,17 @@ from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+# Update platforms to include NUMBER
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.NUMBER]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Solar Savings from a config entry."""
     
-    # Forward the setup to the sensor platform
+    # Forward the setup to the platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Listen for options updates (this allows re-configuration without restarting)
+    # Listen for options updates
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
     return True
