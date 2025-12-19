@@ -12,26 +12,61 @@ class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        """Get the options flow for this handler."""
+        return SolarSavingsOptionsFlowHandler(config_entry)
+
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         errors = {}
 
         if user_input is not None:
-            # When the user submits the form, create the entry
             return self.async_create_entry(
                 title=user_input["test_name"], 
                 data=user_input
             )
 
-        # Define the form schema: Name (string) and Value (float)
-        # vol.Coerce(float) ensures that if the UI sends "123.45" as a string, it gets converted to a float.
+        # Define the form schema with new optional rate fields
         data_schema = vol.Schema(
             {
                 vol.Required("test_name", default="Test Entity"): str,
                 vol.Required("test_value", default=69420.0): vol.Coerce(float),
+                vol.Optional("on_peak_rate", default=0.0): vol.Coerce(float),
+                vol.Optional("off_peak_rate", default=0.0): vol.Coerce(float),
             }
         )
 
         return self.async_show_form(
             step_id="user", data_schema=data_schema, errors=errors
         )
+
+class SolarSavingsOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options flow for Solar Savings."""
+
+    def __init__(self, config_entry):
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        """Manage the options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        # Get current values from options, falling back to initial data, falling back to 0.0
+        current_on_peak = self.config_entry.options.get(
+            "on_peak_rate", self.config_entry.data.get("on_peak_rate", 0.0)
+        )
+        current_off_peak = self.config_entry.options.get(
+            "off_peak_rate", self.config_entry.data.get("off_peak_rate", 0.0)
+        )
+
+        schema = vol.Schema(
+            {
+                vol.Optional("on_peak_rate", default=current_on_peak): vol.Coerce(float),
+                vol.Optional("off_peak_rate", default=current_off_peak): vol.Coerce(float),
+            }
+        )
+
+        return self.async_show_form(step_id="init", data_schema=schema)

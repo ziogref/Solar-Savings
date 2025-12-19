@@ -3,16 +3,29 @@
     "step": {
       "user": {
         "title": "Solar Savings Configuration",
-        "description": "Set up your test entity",
+        "description": "Set up your energy rates",
         "data": {
           "test_name": "Entity Name",
-          "test_value": "Initial Value (AUD)"
+          "test_value": "Initial Value (AUD)",
+          "on_peak_rate": "On Peak Rate (c/kWh)",
+          "off_peak_rate": "Off Peak Rate (c/kWh)"
         }
       }
     },
     "error": {},
     "abort": {
       "already_configured": "Device is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Update Rates",
+        "data": {
+          "on_peak_rate": "On Peak Rate (c/kWh)",
+          "off_peak_rate": "Off Peak Rate (c/kWh)"
+        }
+      }
     }
   }
 }
