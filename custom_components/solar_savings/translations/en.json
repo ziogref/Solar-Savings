@@ -5,8 +5,6 @@
         "title": "Solar Savings Configuration",
         "description": "Set up your energy rates",
         "data": {
-          "test_name": "Entity Name",
-          "test_value": "Initial Value (AUD)",
           "on_peak_rate": "On Peak Rate (c/kWh)",
           "off_peak_rate": "Off Peak Rate (c/kWh)"
         }

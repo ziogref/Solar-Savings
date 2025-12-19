@@ -24,15 +24,13 @@ class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             return self.async_create_entry(
-                title=user_input["test_name"], 
+                title="Solar Savings", 
                 data=user_input
             )
 
-        # Define the form schema with new optional rate fields
+        # Define the form schema: Only Rate fields now
         data_schema = vol.Schema(
             {
-                vol.Required("test_name", default="Test Entity"): str,
-                vol.Required("test_value", default=69420.0): vol.Coerce(float),
                 vol.Optional("on_peak_rate", default=0.0): vol.Coerce(float),
                 vol.Optional("off_peak_rate", default=0.0): vol.Coerce(float),
             }
