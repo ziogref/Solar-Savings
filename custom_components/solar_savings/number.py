@@ -7,6 +7,7 @@ from homeassistant.components.number import (
     NumberMode,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -22,22 +23,9 @@ async def async_setup_entry(
     
     entities = []
 
-    # Create editable numbers for rates
-    # We map the internal config key to a friendly name
-    rates = {
-        "on_peak_rate": "On Peak Rate",
-        "off_peak_rate": "Off Peak Rate",
-    }
-
-    for key, name in rates.items():
-        entities.append(
-            SolarSavingsRateNumber(
-                hass=hass,
-                entry=entry,
-                name=name,
-                config_key=key
-            )
-        )
+    # Future Rates (Configuration controls)
+    entities.append(SolarSavingsRateNumber(hass, entry, "Future On Peak", "future_on_peak_rate", EntityCategory.CONFIG))
+    entities.append(SolarSavingsRateNumber(hass, entry, "Future Off Peak", "future_off_peak_rate", EntityCategory.CONFIG))
     
     async_add_entities(entities)
 
@@ -46,10 +34,10 @@ class SolarSavingsRateNumber(NumberEntity):
     """Representation of a Solar Savings Number entity."""
 
     _attr_has_entity_name = True
-    _attr_mode = NumberMode.BOX # Use a text box instead of a slider for precision
+    _attr_mode = NumberMode.BOX 
     _attr_native_min_value = 0.0
-    _attr_native_max_value = 1000.0 # Reasonable max cents/kWh
-    _attr_native_step = 0.001 # Allow partial cents
+    _attr_native_max_value = 1000.0
+    _attr_native_step = 0.001
     _attr_native_unit_of_measurement = "c/kWh"
     _attr_device_class = NumberDeviceClass.MONETARY
     _attr_icon = "mdi:currency-usd"
@@ -59,7 +47,8 @@ class SolarSavingsRateNumber(NumberEntity):
         hass: HomeAssistant, 
         entry: ConfigEntry, 
         name: str, 
-        config_key: str
+        config_key: str,
+        category: EntityCategory | None
     ) -> None:
         """Initialize the number."""
         self.hass = hass
@@ -68,11 +57,12 @@ class SolarSavingsRateNumber(NumberEntity):
         
         self._attr_name = name
         self._attr_unique_id = f"{entry.entry_id}_{config_key}"
+        if category:
+            self._attr_entity_category = category
 
     @property
     def native_value(self) -> float | None:
         """Return the current value from config options."""
-        # Check options first, then data, then default to 0.0
         return self._entry.options.get(
             self._config_key, 
             self._entry.data.get(self._config_key, 0.0)
@@ -80,14 +70,9 @@ class SolarSavingsRateNumber(NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
-        # Create a mutable copy of the current options
         new_options = self._entry.options.copy()
-        
-        # Update the specific value
         new_options[self._config_key] = value
         
-        # Save back to Home Assistant
-        # This will trigger the reload listener in __init__.py
         self.hass.config_entries.async_update_entry(
             self._entry, 
             options=new_options
