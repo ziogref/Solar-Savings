@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import async_track_time_change
+from homeassistant.util import dt as dt_util  # Use HA's timezone utility
 
 from .const import DOMAIN
 
@@ -20,61 +20,70 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    # 1. Register the update listener
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
-    # Daily check at midnight
-    async_track_time_change(hass, check_scheduled_rates(hass, entry), hour=0, minute=0, second=1)
+    # 2. Define the checker function
+    async def check_rates_now(_):
+        await apply_scheduled_rates(hass, entry)
+
+    # 3. Schedule the daily check and register CLEANUP (Fixes the leak)
+    # This ensures the old listener is removed when the integration reloads
+    entry.async_on_unload(
+        async_track_time_change(hass, check_rates_now, hour=0, minute=0, second=1)
+    )
+
+    # 4. Check immediately on startup/reload
+    # This ensures if the date is "Today", it applies instantly.
+    await check_rates_now(None)
 
     return True
 
-def check_scheduled_rates(hass: HomeAssistant, entry: ConfigEntry):
-    """Return a wrapper to be called by the scheduler."""
-    async def _check_wrapper(now):
-        """Check if today is the day to apply new rates."""
-        
-        scheduled_date_str = entry.options.get("scheduled_date")
-        
-        if not scheduled_date_str:
-            return 
-
-        today_str = date.today().isoformat()
-
-        if today_str >= scheduled_date_str:
-            _LOGGER.info("Solar Savings: Applying scheduled changes.")
-            
-            # Get future values
-            future_on = entry.options.get("future_on_peak_rate")
-            future_off = entry.options.get("future_off_peak_rate")
-            future_schedule = entry.options.get("future_peak_schedule")
-
-            new_options = entry.options.copy()
-            changes_made = False
-
-            # Apply Rates
-            if future_on is not None and future_on > 0:
-                new_options["on_peak_rate"] = future_on
-                new_options["future_on_peak_rate"] = 0.0
-                changes_made = True
-            
-            if future_off is not None and future_off > 0:
-                new_options["off_peak_rate"] = future_off
-                new_options["future_off_peak_rate"] = 0.0
-                changes_made = True
-
-            # Apply Schedule
-            if future_schedule:
-                new_options["peak_schedule"] = future_schedule
-                new_options["future_peak_schedule"] = None # Reset future
-                changes_made = True
-
-            if changes_made:
-                # Clear the date
-                new_options["scheduled_date"] = None
-                
-                # Save and reload
-                hass.config_entries.async_update_entry(entry, options=new_options)
+async def apply_scheduled_rates(hass: HomeAssistant, entry: ConfigEntry):
+    """Check if today is the day to apply new rates."""
     
-    return _check_wrapper
+    scheduled_date_str = entry.options.get("scheduled_date")
+    
+    if not scheduled_date_str:
+        return 
+
+    # Use HA's timezone aware 'now', then get the date
+    today_str = dt_util.now().date().isoformat()
+
+    if today_str >= scheduled_date_str:
+        _LOGGER.info("Solar Savings: Applying scheduled changes.")
+        
+        # Get future values
+        future_on = entry.options.get("future_on_peak_rate")
+        future_off = entry.options.get("future_off_peak_rate")
+        future_schedule = entry.options.get("future_peak_schedule")
+
+        new_options = entry.options.copy()
+        changes_made = False
+
+        # Apply Rates
+        if future_on is not None and future_on > 0:
+            new_options["on_peak_rate"] = future_on
+            new_options["future_on_peak_rate"] = 0.0
+            changes_made = True
+        
+        if future_off is not None and future_off > 0:
+            new_options["off_peak_rate"] = future_off
+            new_options["future_off_peak_rate"] = 0.0
+            changes_made = True
+
+        # Apply Schedule
+        if future_schedule:
+            new_options["peak_schedule"] = future_schedule
+            new_options["future_peak_schedule"] = None # Reset future
+            changes_made = True
+
+        if changes_made:
+            # Clear the date
+            new_options["scheduled_date"] = None
+            
+            # Save and reload
+            hass.config_entries.async_update_entry(entry, options=new_options)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
