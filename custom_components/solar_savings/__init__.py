@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import async_track_time_change
-from homeassistant.util import dt as dt_util  # Use HA's timezone utility
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 
@@ -20,21 +20,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # 1. Register the update listener
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
-    # 2. Define the checker function
     async def check_rates_now(_):
         await apply_scheduled_rates(hass, entry)
 
-    # 3. Schedule the daily check and register CLEANUP (Fixes the leak)
-    # This ensures the old listener is removed when the integration reloads
+    # Schedule the daily check and register CLEANUP
     entry.async_on_unload(
         async_track_time_change(hass, check_rates_now, hour=0, minute=0, second=1)
     )
 
-    # 4. Check immediately on startup/reload
-    # This ensures if the date is "Today", it applies instantly.
+    # Check immediately on startup/reload
     await check_rates_now(None)
 
     return True
@@ -56,6 +52,7 @@ async def apply_scheduled_rates(hass: HomeAssistant, entry: ConfigEntry):
         # Get future values
         future_on = entry.options.get("future_on_peak_rate")
         future_off = entry.options.get("future_off_peak_rate")
+        future_export = entry.options.get("future_export_rate")
         future_schedule = entry.options.get("future_peak_schedule")
 
         new_options = entry.options.copy()
@@ -70,6 +67,11 @@ async def apply_scheduled_rates(hass: HomeAssistant, entry: ConfigEntry):
         if future_off is not None and future_off > 0:
             new_options["off_peak_rate"] = future_off
             new_options["future_off_peak_rate"] = 0.0
+            changes_made = True
+
+        if future_export is not None and future_export > 0:
+            new_options["export_rate"] = future_export
+            new_options["future_export_rate"] = 0.0
             changes_made = True
 
         # Apply Schedule

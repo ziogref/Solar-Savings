@@ -21,9 +21,10 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Solar Savings sensors."""
     
-    # Get current values (Source data is in CENTS)
+    # Get current values
     on_peak = entry.options.get("on_peak_rate", entry.data.get("on_peak_rate", 0.0))
     off_peak = entry.options.get("off_peak_rate", entry.data.get("off_peak_rate", 0.0))
+    export_rate = entry.options.get("export_rate", entry.data.get("export_rate", 0.0))
     active_schedule = entry.options.get("peak_schedule", entry.data.get("peak_schedule", "None"))
 
     entities = []
@@ -38,7 +39,7 @@ async def async_setup_entry(
         )
     )
 
-    # 2. On Peak Rate Sensor (Static - Cents)
+    # 2. On Peak Rate Sensor (Static)
     entities.append(
         SolarSavingsRateSensor(
             name="On Peak Rate",
@@ -48,7 +49,7 @@ async def async_setup_entry(
         )
     )
 
-    # 3. Off Peak Rate Sensor (Static - Cents)
+    # 3. Off Peak Rate Sensor (Static)
     entities.append(
         SolarSavingsRateSensor(
             name="Off Peak Rate",
@@ -58,10 +59,33 @@ async def async_setup_entry(
         )
     )
 
+    # 4. Export Rate Sensors (Static)
+    entities.append(
+        SolarSavingsExportSensor(
+            hass=hass,
+            name="Export Rate (Cents)",
+            value=export_rate,
+            entry_id=entry.entry_id,
+            unique_suffix="export_rate_cents",
+            mode="cents"
+        )
+    )
+
+    entities.append(
+        SolarSavingsExportSensor(
+            hass=hass,
+            name="Export Rate (Dollars)",
+            value=export_rate,
+            entry_id=entry.entry_id,
+            unique_suffix="export_rate_dollars",
+            mode="dollars"
+        )
+    )
+
     # Dynamic Sensors (Only if a schedule is configured)
     if active_schedule and active_schedule != "None":
         
-        # 4. Current Import Rate (Cents)
+        # 5. Current Import Rate (Cents)
         entities.append(
             SolarSavingsCurrentRateSensor(
                 hass=hass,
@@ -75,7 +99,7 @@ async def async_setup_entry(
             )
         )
 
-        # 5. Current Import Rate (Dollars) - Converted
+        # 6. Current Import Rate (Dollars)
         entities.append(
             SolarSavingsCurrentRateSensor(
                 hass=hass,
@@ -115,7 +139,7 @@ class SolarSavingsTextSensor(SensorEntity):
 
 
 class SolarSavingsRateSensor(SensorEntity):
-    """Representation of a Static Numeric Rate Sensor."""
+    """Representation of a Static Numeric Rate Sensor (always Cents)."""
 
     _attr_has_entity_name = True
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -127,6 +151,39 @@ class SolarSavingsRateSensor(SensorEntity):
         self._attr_native_value = value
         self._entry_id = entry_id
         self._attr_unique_id = f"{entry_id}_{unique_suffix}"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry_id)},
+            name="Solar Savings",
+            manufacturer="Solar Savings Integration",
+            model="Savings Calculator",
+        )
+
+
+class SolarSavingsExportSensor(SensorEntity):
+    """Representation of an Export Rate Sensor (Supports Cents or Dollars)."""
+
+    _attr_has_entity_name = True
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:home-export-outline"
+
+    def __init__(self, hass: HomeAssistant, name: str, value: float, entry_id: str, unique_suffix: str, mode: str) -> None:
+        self._attr_name = name
+        self._entry_id = entry_id
+        self._attr_unique_id = f"{entry_id}_{unique_suffix}"
+        
+        # Determine Value and Unit based on mode
+        if mode == "dollars":
+            currency = hass.config.currency
+            self._attr_native_unit_of_measurement = f"{currency}/kWh"
+            self._attr_native_value = value / 100.0
+            self._attr_suggested_display_precision = 4
+        else:
+            self._attr_native_unit_of_measurement = "c/kWh"
+            self._attr_native_value = value
+            self._attr_suggested_display_precision = 2
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -171,10 +228,10 @@ class SolarSavingsCurrentRateSensor(SensorEntity):
         if self._mode == "dollars":
             currency = hass.config.currency
             self._attr_native_unit_of_measurement = f"{currency}/kWh"
-            self._attr_suggested_display_precision = 4 # e.g. $0.2555
+            self._attr_suggested_display_precision = 4 
         else:
             self._attr_native_unit_of_measurement = "c/kWh"
-            self._attr_suggested_display_precision = 2 # e.g. 25.55c
+            self._attr_suggested_display_precision = 2 
 
     async def async_added_to_hass(self) -> None:
         """Register callbacks when entity is added."""
@@ -205,10 +262,8 @@ class SolarSavingsCurrentRateSensor(SensorEntity):
 
         # 2. Apply Output Conversion
         if self._mode == "dollars":
-            # CONVERSION: Divide Cents by 100.0 to get Dollars
             self._attr_native_value = current_rate_cents / 100.0
         else:
-            # No conversion, strictly pass-through
             self._attr_native_value = current_rate_cents
 
         self._attr_extra_state_attributes = {

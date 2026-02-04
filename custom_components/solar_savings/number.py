@@ -26,6 +26,7 @@ async def async_setup_entry(
     # Future Rates (Configuration controls)
     entities.append(SolarSavingsRateNumber(hass, entry, "Future On Peak", "future_on_peak_rate", EntityCategory.CONFIG))
     entities.append(SolarSavingsRateNumber(hass, entry, "Future Off Peak", "future_off_peak_rate", EntityCategory.CONFIG))
+    entities.append(SolarSavingsRateNumber(hass, entry, "Future Export Rate", "future_export_rate", EntityCategory.CONFIG))
     
     async_add_entities(entities)
 

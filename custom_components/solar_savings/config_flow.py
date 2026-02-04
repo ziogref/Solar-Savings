@@ -37,6 +37,7 @@ class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 vol.Optional("on_peak_rate", default=0.0): vol.Coerce(float),
                 vol.Optional("off_peak_rate", default=0.0): vol.Coerce(float),
+                vol.Optional("export_rate", default=0.0): vol.Coerce(float),
             }
         )
 
@@ -63,6 +64,9 @@ class SolarSavingsOptionsFlowHandler(config_entries.OptionsFlow):
         current_off_peak = self.config_entry.options.get(
             "off_peak_rate", self.config_entry.data.get("off_peak_rate", 0.0)
         )
+        current_export = self.config_entry.options.get(
+            "export_rate", self.config_entry.data.get("export_rate", 0.0)
+        )
         current_schedule = self.config_entry.options.get(
             "peak_schedule", self.config_entry.data.get("peak_schedule")
         )
@@ -74,6 +78,7 @@ class SolarSavingsOptionsFlowHandler(config_entries.OptionsFlow):
                 ),
                 vol.Optional("on_peak_rate", default=current_on_peak): vol.Coerce(float),
                 vol.Optional("off_peak_rate", default=current_off_peak): vol.Coerce(float),
+                vol.Optional("export_rate", default=current_export): vol.Coerce(float),
             }
         )
 
