@@ -6,7 +6,16 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    CONF_PEAK_SCHEDULE,
+    CONF_ON_PEAK_RATE,
+    CONF_OFF_PEAK_RATE,
+    CONF_EXPORT_RATE,
+    CONF_SOLAR_GENERATION_ENTITY,
+    CONF_GRID_IMPORT_ENTITY,
+    CONF_GRID_EXPORT_ENTITY,
+)
 
 class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Solar Savings."""
@@ -29,15 +38,26 @@ class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data=user_input
             )
 
-        # Define the form schema: Rate fields + Schedule Selector
+        # Define the form schema
         data_schema = vol.Schema(
             {
-                vol.Required("peak_schedule"): selector.EntitySelector(
+                # Inputs
+                vol.Required(CONF_SOLAR_GENERATION_ENTITY): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="energy")
+                ),
+                vol.Required(CONF_GRID_IMPORT_ENTITY): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="energy")
+                ),
+                vol.Required(CONF_GRID_EXPORT_ENTITY): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="energy")
+                ),
+                # Schedule & Rates
+                vol.Required(CONF_PEAK_SCHEDULE): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="schedule")
                 ),
-                vol.Optional("on_peak_rate", default=0.0): vol.Coerce(float),
-                vol.Optional("off_peak_rate", default=0.0): vol.Coerce(float),
-                vol.Optional("export_rate", default=0.0): vol.Coerce(float),
+                vol.Optional(CONF_ON_PEAK_RATE, default=0.0): vol.Coerce(float),
+                vol.Optional(CONF_OFF_PEAK_RATE, default=0.0): vol.Coerce(float),
+                vol.Optional(CONF_EXPORT_RATE, default=0.0): vol.Coerce(float),
             }
         )
 
@@ -57,28 +77,29 @@ class SolarSavingsOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # Get current values
-        current_on_peak = self.config_entry.options.get(
-            "on_peak_rate", self.config_entry.data.get("on_peak_rate", 0.0)
-        )
-        current_off_peak = self.config_entry.options.get(
-            "off_peak_rate", self.config_entry.data.get("off_peak_rate", 0.0)
-        )
-        current_export = self.config_entry.options.get(
-            "export_rate", self.config_entry.data.get("export_rate", 0.0)
-        )
-        current_schedule = self.config_entry.options.get(
-            "peak_schedule", self.config_entry.data.get("peak_schedule")
-        )
+        # Helper to get current value from options or data
+        def get_current(key, default=None):
+            return self.config_entry.options.get(
+                key, self.config_entry.data.get(key, default)
+            )
 
         schema = vol.Schema(
             {
-                vol.Optional("peak_schedule", description={"suggested_value": current_schedule}): selector.EntitySelector(
+                vol.Optional(CONF_SOLAR_GENERATION_ENTITY, description={"suggested_value": get_current(CONF_SOLAR_GENERATION_ENTITY)}): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="energy")
+                ),
+                vol.Optional(CONF_GRID_IMPORT_ENTITY, description={"suggested_value": get_current(CONF_GRID_IMPORT_ENTITY)}): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="energy")
+                ),
+                vol.Optional(CONF_GRID_EXPORT_ENTITY, description={"suggested_value": get_current(CONF_GRID_EXPORT_ENTITY)}): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="energy")
+                ),
+                vol.Optional(CONF_PEAK_SCHEDULE, description={"suggested_value": get_current(CONF_PEAK_SCHEDULE)}): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="schedule")
                 ),
-                vol.Optional("on_peak_rate", default=current_on_peak): vol.Coerce(float),
-                vol.Optional("off_peak_rate", default=current_off_peak): vol.Coerce(float),
-                vol.Optional("export_rate", default=current_export): vol.Coerce(float),
+                vol.Optional(CONF_ON_PEAK_RATE, default=get_current(CONF_ON_PEAK_RATE, 0.0)): vol.Coerce(float),
+                vol.Optional(CONF_OFF_PEAK_RATE, default=get_current(CONF_OFF_PEAK_RATE, 0.0)): vol.Coerce(float),
+                vol.Optional(CONF_EXPORT_RATE, default=get_current(CONF_EXPORT_RATE, 0.0)): vol.Coerce(float),
             }
         )
 

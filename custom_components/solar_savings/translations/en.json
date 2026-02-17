@@ -3,11 +3,15 @@
     "step": {
       "user": {
         "title": "Solar Savings Configuration",
-        "description": "Select your Schedule Helper and Rates.\n\n(Create a Schedule Helper in Settings > Devices & Services > Helpers first)",
+        "description": "Configure your Solar Inverter entities and Tariff rates.\n\nAll 'Total' values calculated will start from 0 upon configuration.",
         "data": {
-          "peak_schedule": "Peak Tariff Schedule",
+          "solar_generation_entity": "Total Solar Generation Entity (kWh)",
+          "grid_import_entity": "Total Grid Import Entity (kWh)",
+          "grid_export_entity": "Total Grid Export Entity (kWh)",
+          "peak_schedule": "Peak Tariff Schedule Helper",
           "on_peak_rate": "On Peak Rate (c/kWh)",
-          "off_peak_rate": "Off Peak Rate (c/kWh)"
+          "off_peak_rate": "Off Peak Rate (c/kWh)",
+          "export_rate": "Export Rate (c/kWh)"
         }
       }
     },
@@ -21,9 +25,13 @@
       "init": {
         "title": "Update Configuration",
         "data": {
-          "peak_schedule": "Peak Tariff Schedule",
+          "solar_generation_entity": "Total Solar Generation Entity (kWh)",
+          "grid_import_entity": "Total Grid Import Entity (kWh)",
+          "grid_export_entity": "Total Grid Export Entity (kWh)",
+          "peak_schedule": "Peak Tariff Schedule Helper",
           "on_peak_rate": "On Peak Rate (c/kWh)",
-          "off_peak_rate": "Off Peak Rate (c/kWh)"
+          "off_peak_rate": "Off Peak Rate (c/kWh)",
+          "export_rate": "Export Rate (c/kWh)"
         }
       }
     }
