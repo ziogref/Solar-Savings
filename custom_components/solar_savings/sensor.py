@@ -2,12 +2,9 @@
 from __future__ import annotations
 
 import logging
-import logging
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
-    SensorDeviceClass,
-    RestoreSensor,
     SensorDeviceClass,
     RestoreSensor,
 )
@@ -17,20 +14,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN, UnitOfEnergy
-from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN, UnitOfEnergy
 
-from .const import (
-    DOMAIN, 
-    CONF_PEAK_SCHEDULE,
-    CONF_ON_PEAK_RATE,
-    CONF_OFF_PEAK_RATE,
-    CONF_EXPORT_RATE,
-    CONF_SOLAR_GENERATION_ENTITY,
-    CONF_GRID_IMPORT_ENTITY,
-    CONF_GRID_EXPORT_ENTITY
-)
-
-_LOGGER = logging.getLogger(__name__)
 from .const import (
     DOMAIN, 
     CONF_PEAK_SCHEDULE,
@@ -51,16 +35,6 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Solar Savings sensors."""
     
-    # Configuration
-    on_peak = entry.options.get(CONF_ON_PEAK_RATE, entry.data.get(CONF_ON_PEAK_RATE, 0.0))
-    off_peak = entry.options.get(CONF_OFF_PEAK_RATE, entry.data.get(CONF_OFF_PEAK_RATE, 0.0))
-    export_rate = entry.options.get(CONF_EXPORT_RATE, entry.data.get(CONF_EXPORT_RATE, 0.0))
-    active_schedule = entry.options.get(CONF_PEAK_SCHEDULE, entry.data.get(CONF_PEAK_SCHEDULE, "None"))
-    
-    # Input Entities
-    gen_entity = entry.options.get(CONF_SOLAR_GENERATION_ENTITY, entry.data.get(CONF_SOLAR_GENERATION_ENTITY))
-    imp_entity = entry.options.get(CONF_GRID_IMPORT_ENTITY, entry.data.get(CONF_GRID_IMPORT_ENTITY))
-    exp_entity = entry.options.get(CONF_GRID_EXPORT_ENTITY, entry.data.get(CONF_GRID_EXPORT_ENTITY))
     # Configuration
     on_peak = entry.options.get(CONF_ON_PEAK_RATE, entry.data.get(CONF_ON_PEAK_RATE, 0.0))
     off_peak = entry.options.get(CONF_OFF_PEAK_RATE, entry.data.get(CONF_OFF_PEAK_RATE, 0.0))
@@ -397,9 +371,6 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
     """
     Tracks Financial Savings from Self Consumption ONLY.
     Savings = (Self Consumed * Import Rate)
-    Logic:
-    Gen Delta -> Add (Delta * ImportRate)  [Assume all gen is consumed]
-    Exp Delta -> Subtract (Delta * ImportRate) [Oops, it was exported, reverse the savings]
     """
     _attr_has_entity_name = True
     _attr_state_class = SensorStateClass.TOTAL
@@ -556,20 +527,24 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
     def _handle_change(self, event):
         eid = event.data.get("entity_id")
         new_s = event.data.get("new_state")
-        if not new_s or new_s.state in (STATE_UNKNOWN, STATE_UNAVAILABLE): return
+        if not new_s or new_s.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+            return
         try:
             val = float(new_s.state)
-        except ValueError: return
+        except ValueError:
+            return
 
         if eid == self._gen_entity:
             if self._last_gen is not None:
                 d = val - self._last_gen
-                if d > 0: self._attr_native_value += d
+                if d > 0:
+                    self._attr_native_value += d
             self._last_gen = val
         elif eid == self._exp_entity:
             if self._last_exp is not None:
                 d = val - self._last_exp
-                if d > 0: self._attr_native_value -= d # Export reduces self consumption
+                if d > 0:
+                    self._attr_native_value -= d # Export reduces self consumption
             self._last_exp = val
         
         self.async_write_ha_state()
@@ -578,12 +553,14 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
 # --- Legacy Sensors (kept for compatibility) ---
 class SolarSavingsTextSensor(SensorEntity):
     _attr_has_entity_name = True
+
     def __init__(self, name: str, value: str, entry_id: str, icon: str) -> None:
         self._attr_name = name
         self._attr_native_value = value
         self._entry_id = entry_id
         self._attr_icon = icon
         self._attr_unique_id = f"{entry_id}_{name.lower().replace(' ', '_')}"
+
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
@@ -592,17 +569,20 @@ class SolarSavingsTextSensor(SensorEntity):
             manufacturer="Solar Savings Integration",
             model="Savings Calculator",
         )
+
 
 class SolarSavingsRateSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "c/kWh"
     _attr_icon = "mdi:currency-usd"
+
     def __init__(self, name: str, value: float, entry_id: str, unique_suffix: str) -> None:
         self._attr_name = name
         self._attr_native_value = value
         self._entry_id = entry_id
         self._attr_unique_id = f"{entry_id}_{unique_suffix}"
+
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
@@ -612,10 +592,12 @@ class SolarSavingsRateSensor(SensorEntity):
             model="Savings Calculator",
         )
 
+
 class SolarSavingsExportSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:home-export-outline"
+
     def __init__(self, hass: HomeAssistant, name: str, value: float, entry_id: str, unique_suffix: str, mode: str) -> None:
         self._attr_name = name
         self._entry_id = entry_id
@@ -629,6 +611,7 @@ class SolarSavingsExportSensor(SensorEntity):
             self._attr_native_unit_of_measurement = "c/kWh"
             self._attr_native_value = value
             self._attr_suggested_display_precision = 2
+
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
@@ -638,11 +621,12 @@ class SolarSavingsExportSensor(SensorEntity):
             model="Savings Calculator",
         )
 
+
 class SolarSavingsCurrentRateSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:cash-fast"
-    def __init__(self, hass, entry_id, schedule_entity_id, on_peak, off_peak, name, unique_suffix, mode) -> None:
+
     def __init__(self, hass, entry_id, schedule_entity_id, on_peak, off_peak, name, unique_suffix, mode) -> None:
         self.hass = hass
         self._entry_id = entry_id
@@ -681,12 +665,14 @@ class SolarSavingsCurrentRateSensor(SensorEntity):
         else:
             current_rate_cents = self._off_peak
             status = "Off Peak"
+        
         if self._mode == "dollars":
             self._attr_native_value = current_rate_cents / 100.0
         else:
             self._attr_native_value = current_rate_cents
+            
         self._attr_extra_state_attributes = {"status": status, "raw_cents": current_rate_cents}
-        self._attr_extra_state_attributes = {"status": status, "raw_cents": current_rate_cents}
+
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
