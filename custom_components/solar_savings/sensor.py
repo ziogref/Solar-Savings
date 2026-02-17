@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import logging
+import logging
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
+    SensorDeviceClass,
+    RestoreSensor,
     SensorDeviceClass,
     RestoreSensor,
 )
@@ -14,7 +17,20 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN, UnitOfEnergy
+from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN, UnitOfEnergy
 
+from .const import (
+    DOMAIN, 
+    CONF_PEAK_SCHEDULE,
+    CONF_ON_PEAK_RATE,
+    CONF_OFF_PEAK_RATE,
+    CONF_EXPORT_RATE,
+    CONF_SOLAR_GENERATION_ENTITY,
+    CONF_GRID_IMPORT_ENTITY,
+    CONF_GRID_EXPORT_ENTITY
+)
+
+_LOGGER = logging.getLogger(__name__)
 from .const import (
     DOMAIN, 
     CONF_PEAK_SCHEDULE,
@@ -35,6 +51,16 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Solar Savings sensors."""
     
+    # Configuration
+    on_peak = entry.options.get(CONF_ON_PEAK_RATE, entry.data.get(CONF_ON_PEAK_RATE, 0.0))
+    off_peak = entry.options.get(CONF_OFF_PEAK_RATE, entry.data.get(CONF_OFF_PEAK_RATE, 0.0))
+    export_rate = entry.options.get(CONF_EXPORT_RATE, entry.data.get(CONF_EXPORT_RATE, 0.0))
+    active_schedule = entry.options.get(CONF_PEAK_SCHEDULE, entry.data.get(CONF_PEAK_SCHEDULE, "None"))
+    
+    # Input Entities
+    gen_entity = entry.options.get(CONF_SOLAR_GENERATION_ENTITY, entry.data.get(CONF_SOLAR_GENERATION_ENTITY))
+    imp_entity = entry.options.get(CONF_GRID_IMPORT_ENTITY, entry.data.get(CONF_GRID_IMPORT_ENTITY))
+    exp_entity = entry.options.get(CONF_GRID_EXPORT_ENTITY, entry.data.get(CONF_GRID_EXPORT_ENTITY))
     # Configuration
     on_peak = entry.options.get(CONF_ON_PEAK_RATE, entry.data.get(CONF_ON_PEAK_RATE, 0.0))
     off_peak = entry.options.get(CONF_OFF_PEAK_RATE, entry.data.get(CONF_OFF_PEAK_RATE, 0.0))
@@ -617,6 +643,7 @@ class SolarSavingsCurrentRateSensor(SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:cash-fast"
     def __init__(self, hass, entry_id, schedule_entity_id, on_peak, off_peak, name, unique_suffix, mode) -> None:
+    def __init__(self, hass, entry_id, schedule_entity_id, on_peak, off_peak, name, unique_suffix, mode) -> None:
         self.hass = hass
         self._entry_id = entry_id
         self._schedule_entity_id = schedule_entity_id
@@ -658,6 +685,7 @@ class SolarSavingsCurrentRateSensor(SensorEntity):
             self._attr_native_value = current_rate_cents / 100.0
         else:
             self._attr_native_value = current_rate_cents
+        self._attr_extra_state_attributes = {"status": status, "raw_cents": current_rate_cents}
         self._attr_extra_state_attributes = {"status": status, "raw_cents": current_rate_cents}
     @property
     def device_info(self) -> DeviceInfo:
