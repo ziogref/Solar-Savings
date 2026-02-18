@@ -24,7 +24,16 @@ from .const import (
     CONF_EXPORT_RATE,
     CONF_SOLAR_GENERATION_ENTITY,
     CONF_GRID_IMPORT_ENTITY,
-    CONF_GRID_EXPORT_ENTITY
+    CONF_GRID_EXPORT_ENTITY,
+    # History
+    CONF_INITIAL_GENERATION,
+    CONF_INITIAL_IMPORT,
+    CONF_INITIAL_EXPORT,
+    CONF_INITIAL_SELF_CONSUMED,
+    CONF_INITIAL_IMPORT_COST,
+    CONF_INITIAL_EXPORT_CREDIT,
+    CONF_INITIAL_SELF_CONSUMED_SAVINGS,
+    CONF_INITIAL_SAVINGS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,6 +63,20 @@ async def async_setup_entry(
     imp_entity = entry.options.get(CONF_GRID_IMPORT_ENTITY, entry.data.get(CONF_GRID_IMPORT_ENTITY))
     exp_entity = entry.options.get(CONF_GRID_EXPORT_ENTITY, entry.data.get(CONF_GRID_EXPORT_ENTITY))
 
+    # Helper to safe get float from options
+    def get_hist(key):
+        return entry.options.get(key, entry.data.get(key, 0.0))
+
+    # Historical Values (Only applied to "total" sensors)
+    hist_gen = get_hist(CONF_INITIAL_GENERATION)
+    hist_imp = get_hist(CONF_INITIAL_IMPORT)
+    hist_exp = get_hist(CONF_INITIAL_EXPORT)
+    hist_self = get_hist(CONF_INITIAL_SELF_CONSUMED)
+    hist_imp_cost = get_hist(CONF_INITIAL_IMPORT_COST)
+    hist_exp_credit = get_hist(CONF_INITIAL_EXPORT_CREDIT)
+    hist_self_savings = get_hist(CONF_INITIAL_SELF_CONSUMED_SAVINGS)
+    hist_savings = get_hist(CONF_INITIAL_SAVINGS)
+
     entities = []
 
     # --- Existing Helper Sensors ---
@@ -72,52 +95,62 @@ async def async_setup_entry(
         
         for period_key, period_name in PERIODS.items():
             
+            # Determine initial value (only for Total)
+            init_gen = hist_gen if period_key == "total" else 0.0
+            init_imp = hist_imp if period_key == "total" else 0.0
+            init_exp = hist_exp if period_key == "total" else 0.0
+            init_self = hist_self if period_key == "total" else 0.0
+            init_imp_cost = hist_imp_cost if period_key == "total" else 0.0
+            init_exp_credit = hist_exp_credit if period_key == "total" else 0.0
+            init_savings = hist_savings if period_key == "total" else 0.0
+            init_self_savings = hist_self_savings if period_key == "total" else 0.0
+
             # 1. Generated Energy
             entities.append(SolarSavingsEnergyAccumulator(
                 hass, entry.entry_id, f"{period_name} Generated Energy", f"{period_key}_generated_energy", 
-                gen_entity, "mdi:solar-power", period_key
+                gen_entity, "mdi:solar-power", period_key, init_gen
             ))
 
             # 2. Imported Energy
             entities.append(SolarSavingsEnergyAccumulator(
                 hass, entry.entry_id, f"{period_name} Imported Energy", f"{period_key}_imported_energy", 
-                imp_entity, "mdi:transmission-tower-import", period_key
+                imp_entity, "mdi:transmission-tower-import", period_key, init_imp
             ))
 
             # 3. Exported Energy
             entities.append(SolarSavingsEnergyAccumulator(
                 hass, entry.entry_id, f"{period_name} Exported Energy", f"{period_key}_exported_energy", 
-                exp_entity, "mdi:transmission-tower-export", period_key
+                exp_entity, "mdi:transmission-tower-export", period_key, init_exp
             ))
 
             # 4. Self Consumed Energy
             entities.append(SolarSavingsSelfConsumptionSensor(
                 hass, entry.entry_id, f"{period_name} Self Consumed Energy", f"{period_key}_self_consumed",
-                gen_entity, exp_entity, period_key
+                gen_entity, exp_entity, period_key, init_self
             ))
 
             # 5. Import Cost ($)
             entities.append(SolarSavingsFinancialAccumulator(
                 hass, entry.entry_id, f"{period_name} Import Cost", f"{period_key}_import_cost",
-                imp_entity, active_schedule, on_peak, off_peak, 0.0, "import", period_key
+                imp_entity, active_schedule, on_peak, off_peak, 0.0, "import", period_key, init_imp_cost
             ))
 
             # 6. Export Credit ($)
             entities.append(SolarSavingsFinancialAccumulator(
                 hass, entry.entry_id, f"{period_name} Export Credit", f"{period_key}_export_credit",
-                exp_entity, active_schedule, on_peak, off_peak, export_rate, "export", period_key
+                exp_entity, active_schedule, on_peak, off_peak, export_rate, "export", period_key, init_exp_credit
             ))
 
             # 7. Solar Savings ($)
             entities.append(SolarSavingsSavingsAccumulator(
                 hass, entry.entry_id, f"{period_name} Solar Savings", f"{period_key}_solar_savings",
-                gen_entity, exp_entity, active_schedule, on_peak, off_peak, export_rate, period_key
+                gen_entity, exp_entity, active_schedule, on_peak, off_peak, export_rate, period_key, init_savings
             ))
 
             # 8. Self Consumption Savings ($)
             entities.append(SolarSavingsSelfConsumptionFinancialAccumulator(
                 hass, entry.entry_id, f"{period_name} Self Consumption Savings", f"{period_key}_self_consumption_savings",
-                gen_entity, exp_entity, active_schedule, on_peak, off_peak, period_key
+                gen_entity, exp_entity, active_schedule, on_peak, off_peak, period_key, init_self_savings
             ))
 
     async_add_entities(entities)
@@ -142,15 +175,17 @@ class SolarSavingsAccumulator(RestoreSensor):
     _attr_has_entity_name = True
     _attr_state_class = SensorStateClass.TOTAL
     
-    def __init__(self, hass, entry_id, name, unique_suffix, source_entity_id, icon, period):
+    def __init__(self, hass, entry_id, name, unique_suffix, source_entity_id, icon, period, initial_value=0.0):
         self.hass = hass
         self._entry_id = entry_id
         self._source_entity_id = source_entity_id
         self._attr_name = name
         self._attr_unique_id = f"{entry_id}_{unique_suffix}"
         self._attr_icon = icon
-        self._attr_native_value = 0.0
         self._period = period # total, daily, monthly, yearly
+        self._initial_value = initial_value
+        self._attr_native_value = 0.0 
+        self._accumulated_delta = 0.0 # Tracks what this sensor has measured itself
         self._last_source_value = None
         self._last_reset = dt_util.now()
 
@@ -167,28 +202,43 @@ class SolarSavingsAccumulator(RestoreSensor):
     def extra_state_attributes(self):
         """Return the state attributes."""
         return {
-            "last_reset": self._last_reset.isoformat()
+            "last_reset": self._last_reset.isoformat(),
+            "initial_offset": self._initial_value, # Store this to detect config changes
+            "accumulated_delta": self._accumulated_delta # Store raw tracked amount
         }
 
     async def async_added_to_hass(self) -> None:
         """Handle entity which will be added."""
         await super().async_added_to_hass()
         
-        # 1. Restore previous accumulated value
+        # 1. Restore previous state
         state = await self.async_get_last_state()
         if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             try:
-                self._attr_native_value = float(state.state)
-                # Restore last reset date
+                # We prioritize restoring the raw 'accumulated_delta' if available
+                # If not (first time upgrading to this version), we try to infer it.
+                if "accumulated_delta" in state.attributes:
+                    self._accumulated_delta = float(state.attributes["accumulated_delta"])
+                else:
+                    # Fallback for existing installs: Assume current value is the delta
+                    # (Since previous version didn't have initial_value)
+                    self._accumulated_delta = float(state.state)
+
+                # Restore reset date
                 if "last_reset" in state.attributes:
                     self._last_reset = dt_util.parse_datetime(state.attributes["last_reset"])
+                    
             except ValueError:
-                self._attr_native_value = 0.0
+                self._accumulated_delta = 0.0
+
+        # 2. Calculate Final Value
+        # Total = (Tracked Delta) + (Configured Initial Value)
+        self._attr_native_value = self._accumulated_delta + self._initial_value
 
         # Check for reset immediately on startup
         self._check_reset()
 
-        # 2. Get current source value to start tracking deltas from NOW
+        # 3. Get current source value to start tracking deltas from NOW
         current_source = self.hass.states.get(self._source_entity_id)
         if current_source and current_source.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             try:
@@ -196,7 +246,7 @@ class SolarSavingsAccumulator(RestoreSensor):
             except ValueError:
                 self._last_source_value = None
 
-        # 3. Listen for changes
+        # 4. Listen for changes
         self.async_on_remove(
             async_track_state_change_event(
                 self.hass, [self._source_entity_id], self._handle_state_change
@@ -222,7 +272,8 @@ class SolarSavingsAccumulator(RestoreSensor):
                 reset = True
         
         if reset:
-            self._attr_native_value = 0.0
+            self._accumulated_delta = 0.0 # Reset tracked amount
+            self._attr_native_value = self._initial_value # Reset to offset (usually 0 for periodic)
             self._last_reset = now
 
     def _handle_state_change(self, event):
@@ -243,7 +294,6 @@ class SolarSavingsAccumulator(RestoreSensor):
         # Initialize last_value if it was missing (first run)
         if self._last_source_value is None:
             self._last_source_value = current_value
-            # Don't return, we update state to save the reset if needed
             self.async_write_ha_state() 
             return
 
@@ -258,11 +308,14 @@ class SolarSavingsAccumulator(RestoreSensor):
             
         self._last_source_value = current_value
         self._process_delta(delta)
+        
+        # Update final state
+        self._attr_native_value = self._accumulated_delta + self._initial_value
         self.async_write_ha_state()
 
     def _process_delta(self, delta):
         """Override this in subclasses to do specific math."""
-        self._attr_native_value += delta
+        self._accumulated_delta += delta
 
 
 # --- Specific Implementations ---
@@ -274,11 +327,11 @@ class SolarSavingsEnergyAccumulator(SolarSavingsAccumulator):
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_suggested_display_precision = 2
 
-    def __init__(self, hass, entry_id, name, unique_suffix, source_entity_id, icon, period):
-        super().__init__(hass, entry_id, name, unique_suffix, source_entity_id, icon, period)
+    def __init__(self, hass, entry_id, name, unique_suffix, source_entity_id, icon, period, initial_value=0.0):
+        super().__init__(hass, entry_id, name, unique_suffix, source_entity_id, icon, period, initial_value)
 
     def _process_delta(self, delta):
-        self._attr_native_value += delta
+        self._accumulated_delta += delta
 
 
 class SolarSavingsFinancialAccumulator(SolarSavingsAccumulator):
@@ -288,9 +341,9 @@ class SolarSavingsFinancialAccumulator(SolarSavingsAccumulator):
     _attr_suggested_display_precision = 2
 
     def __init__(self, hass, entry_id, name, unique_suffix, source_entity_id, 
-                 schedule_id, on_peak, off_peak, export_rate, mode, period):
+                 schedule_id, on_peak, off_peak, export_rate, mode, period, initial_value=0.0):
         # Modes: "import" (costs money), "export" (makes money)
-        super().__init__(hass, entry_id, name, unique_suffix, source_entity_id, "mdi:currency-usd", period)
+        super().__init__(hass, entry_id, name, unique_suffix, source_entity_id, "mdi:currency-usd", period, initial_value)
         self._schedule_id = schedule_id
         self._on_peak = on_peak
         self._off_peak = off_peak
@@ -309,7 +362,7 @@ class SolarSavingsFinancialAccumulator(SolarSavingsAccumulator):
         
         # 2. Convert to Dollars/Currency and accumulate
         cost_delta = delta * (rate_cents / 100.0)
-        self._attr_native_value += cost_delta
+        self._accumulated_delta += cost_delta
 
 
 class SolarSavingsSavingsAccumulator(RestoreSensor):
@@ -325,12 +378,13 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
     _attr_icon = "mdi:piggy-bank"
 
     def __init__(self, hass, entry_id, name, unique_suffix, 
-                 gen_entity, exp_entity, schedule_id, on_peak, off_peak, export_rate, period):
+                 gen_entity, exp_entity, schedule_id, on_peak, off_peak, export_rate, period, initial_value=0.0):
         self.hass = hass
         self._entry_id = entry_id
         self._attr_name = name
         self._attr_unique_id = f"{entry_id}_{unique_suffix}"
         self._period = period
+        self._initial_value = initial_value
         
         self._gen_entity = gen_entity
         self._exp_entity = exp_entity
@@ -340,6 +394,7 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
         self._export_rate = export_rate
         
         self._attr_native_value = 0.0
+        self._accumulated_delta = 0.0
         self._attr_native_unit_of_measurement = hass.config.currency
         self._last_reset = dt_util.now()
 
@@ -359,7 +414,9 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
     def extra_state_attributes(self):
         """Return the state attributes."""
         return {
-            "last_reset": self._last_reset.isoformat()
+            "last_reset": self._last_reset.isoformat(),
+            "initial_offset": self._initial_value,
+            "accumulated_delta": self._accumulated_delta
         }
 
     async def async_added_to_hass(self) -> None:
@@ -370,12 +427,19 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
         state = await self.async_get_last_state()
         if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             try:
-                self._attr_native_value = float(state.state)
+                if "accumulated_delta" in state.attributes:
+                    self._accumulated_delta = float(state.attributes["accumulated_delta"])
+                else:
+                    self._accumulated_delta = float(state.state)
+
                 if "last_reset" in state.attributes:
                     self._last_reset = dt_util.parse_datetime(state.attributes["last_reset"])
             except ValueError:
-                self._attr_native_value = 0.0
+                self._accumulated_delta = 0.0
         
+        # Calculate
+        self._attr_native_value = self._accumulated_delta + self._initial_value
+
         self._check_reset()
 
         # Initialize trackers
@@ -416,7 +480,8 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
                 reset = True
         
         if reset:
-            self._attr_native_value = 0.0
+            self._accumulated_delta = 0.0
+            self._attr_native_value = self._initial_value # Should be 0 for periodic
             self._last_reset = now
 
     def _handle_change(self, event):
@@ -444,7 +509,7 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
                 delta = val - self._last_gen_val
                 if delta > 0:
                     # Gen Delta contributes to savings assuming self-consumption initially
-                    self._attr_native_value += delta * import_rate_dollars
+                    self._accumulated_delta += delta * import_rate_dollars
             self._last_gen_val = val
 
         elif entity_id == self._exp_entity:
@@ -455,9 +520,10 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
                     # Remove the Import Rate we added, and add Export Rate instead.
                     # Math: val += delta * (ExportRate - ImportRate)
                     correction = delta * (export_rate_dollars - import_rate_dollars)
-                    self._attr_native_value += correction
+                    self._accumulated_delta += correction
             self._last_exp_val = val
         
+        self._attr_native_value = self._accumulated_delta + self._initial_value
         self.async_write_ha_state()
 
 
@@ -473,12 +539,13 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
     _attr_icon = "mdi:piggy-bank-outline"
 
     def __init__(self, hass, entry_id, name, unique_suffix, 
-                 gen_entity, exp_entity, schedule_id, on_peak, off_peak, period):
+                 gen_entity, exp_entity, schedule_id, on_peak, off_peak, period, initial_value=0.0):
         self.hass = hass
         self._entry_id = entry_id
         self._attr_name = name
         self._attr_unique_id = f"{entry_id}_{unique_suffix}"
         self._period = period
+        self._initial_value = initial_value
         
         self._gen_entity = gen_entity
         self._exp_entity = exp_entity
@@ -487,6 +554,7 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
         self._off_peak = off_peak
         
         self._attr_native_value = 0.0
+        self._accumulated_delta = 0.0
         self._attr_native_unit_of_measurement = hass.config.currency
         self._last_reset = dt_util.now()
 
@@ -504,19 +572,28 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
     
     @property
     def extra_state_attributes(self):
-        return {"last_reset": self._last_reset.isoformat()}
+        return {
+            "last_reset": self._last_reset.isoformat(),
+            "initial_offset": self._initial_value,
+            "accumulated_delta": self._accumulated_delta
+        }
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         state = await self.async_get_last_state()
         if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             try:
-                self._attr_native_value = float(state.state)
+                if "accumulated_delta" in state.attributes:
+                    self._accumulated_delta = float(state.attributes["accumulated_delta"])
+                else:
+                    self._accumulated_delta = float(state.state)
+
                 if "last_reset" in state.attributes:
                     self._last_reset = dt_util.parse_datetime(state.attributes["last_reset"])
             except ValueError:
-                self._attr_native_value = 0.0
+                self._accumulated_delta = 0.0
         
+        self._attr_native_value = self._accumulated_delta + self._initial_value
         self._check_reset()
 
         self._init_tracker(self._gen_entity, "_last_gen_val")
@@ -545,7 +622,8 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
         elif self._period == "yearly" and now.year != self._last_reset.year: reset = True
         
         if reset:
-            self._attr_native_value = 0.0
+            self._accumulated_delta = 0.0
+            self._attr_native_value = self._initial_value
             self._last_reset = now
 
     def _handle_change(self, event):
@@ -566,16 +644,17 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
             if self._last_gen_val is not None:
                 delta = val - self._last_gen_val
                 if delta > 0:
-                    self._attr_native_value += delta * import_rate_dollars
+                    self._accumulated_delta += delta * import_rate_dollars
             self._last_gen_val = val
 
         elif entity_id == self._exp_entity:
             if self._last_exp_val is not None:
                 delta = val - self._last_exp_val
                 if delta > 0:
-                    self._attr_native_value -= delta * import_rate_dollars
+                    self._accumulated_delta -= delta * import_rate_dollars
             self._last_exp_val = val
         
+        self._attr_native_value = self._accumulated_delta + self._initial_value
         self.async_write_ha_state()
 
 
@@ -588,15 +667,17 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
     _attr_suggested_display_precision = 2
     _attr_icon = "mdi:home-lightning-bolt"
 
-    def __init__(self, hass, entry_id, name, unique_suffix, gen_entity_source, exp_entity_source, period):
+    def __init__(self, hass, entry_id, name, unique_suffix, gen_entity_source, exp_entity_source, period, initial_value=0.0):
         self.hass = hass
         self._entry_id = entry_id
         self._attr_name = name
         self._attr_unique_id = f"{entry_id}_{unique_suffix}"
         self._period = period
+        self._initial_value = initial_value
         self._gen_entity = gen_entity_source
         self._exp_entity = exp_entity_source
         self._attr_native_value = 0.0
+        self._accumulated_delta = 0.0
         self._last_gen = None
         self._last_exp = None
         self._last_reset = dt_util.now()
@@ -612,19 +693,28 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
 
     @property
     def extra_state_attributes(self):
-        return {"last_reset": self._last_reset.isoformat()}
+        return {
+            "last_reset": self._last_reset.isoformat(),
+            "initial_offset": self._initial_value,
+            "accumulated_delta": self._accumulated_delta
+        }
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         state = await self.async_get_last_state()
         if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             try:
-                self._attr_native_value = float(state.state)
+                if "accumulated_delta" in state.attributes:
+                    self._accumulated_delta = float(state.attributes["accumulated_delta"])
+                else:
+                    self._accumulated_delta = float(state.state)
+
                 if "last_reset" in state.attributes:
                     self._last_reset = dt_util.parse_datetime(state.attributes["last_reset"])
             except ValueError:
-                self._attr_native_value = 0.0
+                self._accumulated_delta = 0.0
         
+        self._attr_native_value = self._accumulated_delta + self._initial_value
         self._check_reset()
         
         self._init_tracker(self._gen_entity, "_last_gen")
@@ -653,7 +743,8 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
         elif self._period == "yearly" and now.year != self._last_reset.year: reset = True
         
         if reset:
-            self._attr_native_value = 0.0
+            self._accumulated_delta = 0.0
+            self._attr_native_value = self._initial_value
             self._last_reset = now
 
     def _handle_change(self, event):
@@ -668,14 +759,15 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
         if eid == self._gen_entity:
             if self._last_gen is not None:
                 d = val - self._last_gen
-                if d > 0: self._attr_native_value += d
+                if d > 0: self._accumulated_delta += d
             self._last_gen = val
         elif eid == self._exp_entity:
             if self._last_exp is not None:
                 d = val - self._last_exp
-                if d > 0: self._attr_native_value -= d # Export reduces self consumption
+                if d > 0: self._accumulated_delta -= d # Export reduces self consumption
             self._last_exp = val
         
+        self._attr_native_value = self._accumulated_delta + self._initial_value
         self.async_write_ha_state()
 
 

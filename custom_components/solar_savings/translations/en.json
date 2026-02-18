@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Solar Savings Configuration",
-        "description": "Configure your Solar Inverter entities and Tariff rates.\n\nAll 'Total' values calculated will start from 0 upon configuration.",
+        "description": "Configure your Solar Inverter entities and Tariff rates.\n\nAll 'Total' values calculated will start from 0 upon configuration. You can import historical data in Options later.",
         "data": {
           "solar_generation_entity": "Total Solar Generation Entity (kWh)",
           "grid_import_entity": "Total Grid Import Entity (kWh)",
@@ -32,6 +32,20 @@
           "on_peak_rate": "On Peak Rate (c/kWh)",
           "off_peak_rate": "Off Peak Rate (c/kWh)",
           "export_rate": "Export Rate (c/kWh)"
+        }
+      },
+      "history": {
+        "title": "Import Historical Data",
+        "description": "Add your existing historical totals here. These will be added to the 'All Time' sensors.",
+        "data": {
+          "initial_generation": "Historical Solar Generation (kWh)",
+          "initial_import": "Historical Electricity Purchased (kWh)",
+          "initial_export": "Historical Electricity Sold (kWh)",
+          "initial_self_consumed": "Historical Self Consumed (kWh)",
+          "initial_import_cost": "Historical Electricity Purchased Cost ($)",
+          "initial_export_credit": "Historical Electricity Sold Credit ($)",
+          "initial_self_consumed_savings": "Historical Self Consumption Savings ($)",
+          "initial_savings": "Historical Total Savings ($)"
         }
       }
     }

@@ -12,3 +12,14 @@ CONF_EXPORT_RATE = "export_rate"
 CONF_SOLAR_GENERATION_ENTITY = "solar_generation_entity"
 CONF_GRID_IMPORT_ENTITY = "grid_import_entity"
 CONF_GRID_EXPORT_ENTITY = "grid_export_entity"
+
+# Historical / Initial Values (Optional)
+CONF_INITIAL_GENERATION = "initial_generation"
+CONF_INITIAL_IMPORT = "initial_import"
+CONF_INITIAL_EXPORT = "initial_export"
+CONF_INITIAL_SELF_CONSUMED = "initial_self_consumed"
+
+CONF_INITIAL_IMPORT_COST = "initial_import_cost"
+CONF_INITIAL_EXPORT_CREDIT = "initial_export_credit"
+CONF_INITIAL_SELF_CONSUMED_SAVINGS = "initial_self_consumed_savings"
+CONF_INITIAL_SAVINGS = "initial_savings"

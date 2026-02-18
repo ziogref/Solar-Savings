@@ -15,6 +15,15 @@ from .const import (
     CONF_SOLAR_GENERATION_ENTITY,
     CONF_GRID_IMPORT_ENTITY,
     CONF_GRID_EXPORT_ENTITY,
+    # Historical
+    CONF_INITIAL_GENERATION,
+    CONF_INITIAL_IMPORT,
+    CONF_INITIAL_EXPORT,
+    CONF_INITIAL_SELF_CONSUMED,
+    CONF_INITIAL_IMPORT_COST,
+    CONF_INITIAL_EXPORT_CREDIT,
+    CONF_INITIAL_SELF_CONSUMED_SAVINGS,
+    CONF_INITIAL_SAVINGS,
 )
 
 class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -75,9 +84,11 @@ class SolarSavingsOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         """Manage the options."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            # Go to next step for history
+            self.user_input_init = user_input
+            return await self.async_step_history()
 
-        # Helper to get current value from options or data
+        # Helper to get current value
         def get_current(key, default=None):
             return self.config_entry.options.get(
                 key, self.config_entry.data.get(key, default)
@@ -104,3 +115,29 @@ class SolarSavingsOptionsFlowHandler(config_entries.OptionsFlow):
         )
 
         return self.async_show_form(step_id="init", data_schema=schema)
+
+    async def async_step_history(self, user_input=None):
+        """Step to configure historical values."""
+        if user_input is not None:
+            # Merge with init data and create entry
+            final_data = {**self.user_input_init, **user_input}
+            return self.async_create_entry(title="", data=final_data)
+
+        def get_current(key, default=0.0):
+            return self.config_entry.options.get(
+                key, self.config_entry.data.get(key, default)
+            )
+
+        schema = vol.Schema({
+            vol.Optional(CONF_INITIAL_GENERATION, default=get_current(CONF_INITIAL_GENERATION)): vol.Coerce(float),
+            vol.Optional(CONF_INITIAL_IMPORT, default=get_current(CONF_INITIAL_IMPORT)): vol.Coerce(float),
+            vol.Optional(CONF_INITIAL_EXPORT, default=get_current(CONF_INITIAL_EXPORT)): vol.Coerce(float),
+            vol.Optional(CONF_INITIAL_SELF_CONSUMED, default=get_current(CONF_INITIAL_SELF_CONSUMED)): vol.Coerce(float),
+            
+            vol.Optional(CONF_INITIAL_IMPORT_COST, default=get_current(CONF_INITIAL_IMPORT_COST)): vol.Coerce(float),
+            vol.Optional(CONF_INITIAL_EXPORT_CREDIT, default=get_current(CONF_INITIAL_EXPORT_CREDIT)): vol.Coerce(float),
+            vol.Optional(CONF_INITIAL_SELF_CONSUMED_SAVINGS, default=get_current(CONF_INITIAL_SELF_CONSUMED_SAVINGS)): vol.Coerce(float),
+            vol.Optional(CONF_INITIAL_SAVINGS, default=get_current(CONF_INITIAL_SAVINGS)): vol.Coerce(float),
+        })
+
+        return self.async_show_form(step_id="history", data_schema=schema)
