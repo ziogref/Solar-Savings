@@ -232,6 +232,7 @@ class SolarSavingsHistorySensor(SensorEntity):
         if hasattr(self._parent, "get_daily_history"):
              self.update_from_history(self._parent.get_daily_history())
 
+    @callback
     def update_from_history(self, history_list):
         """Called by parent when history updates."""
         if not history_list:
@@ -393,6 +394,7 @@ class SolarSavingsAccumulator(RestoreSensor):
             self._attr_native_value = self._initial_value if self._period == "total" else 0.0
             self._last_reset = now
 
+    @callback
     def _handle_state_change(self, event):
         """Handle updates from the source entity."""
         # Check reset before processing new data
@@ -636,6 +638,7 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
             self._attr_native_value = self._initial_value if self._period == "total" else 0.0
             self._last_reset = now
 
+    @callback
     def _handle_change(self, event):
         self._check_reset()
 
@@ -812,6 +815,7 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
             self._attr_native_value = self._initial_value if self._period == "total" else 0.0
             self._last_reset = now
 
+    @callback
     def _handle_change(self, event):
         self._check_reset()
         entity_id = event.data.get("entity_id")
@@ -967,6 +971,7 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
             self._attr_native_value = self._initial_value if self._period == "total" else 0.0
             self._last_reset = now
 
+    @callback
     def _handle_change(self, event):
         self._check_reset()
         eid = event.data.get("entity_id")
