@@ -12,7 +12,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import async_track_state_change_event, async_track_time_change
 from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN, UnitOfEnergy
 from homeassistant.util import dt as dt_util
 
@@ -105,53 +105,81 @@ async def async_setup_entry(
             init_savings = hist_savings if period_key == "total" else 0.0
             init_self_savings = hist_self_savings if period_key == "total" else 0.0
 
+            # --- Define the Primary Sensor ---
+
             # 1. Generated Energy
-            entities.append(SolarSavingsEnergyAccumulator(
+            s1 = SolarSavingsEnergyAccumulator(
                 hass, entry.entry_id, f"{period_name} Generated Energy", f"{period_key}_generated_energy", 
                 gen_entity, "mdi:solar-power", period_key, init_gen
-            ))
+            )
+            entities.append(s1)
 
             # 2. Imported Energy
-            entities.append(SolarSavingsEnergyAccumulator(
+            s2 = SolarSavingsEnergyAccumulator(
                 hass, entry.entry_id, f"{period_name} Imported Energy", f"{period_key}_imported_energy", 
                 imp_entity, "mdi:transmission-tower-import", period_key, init_imp
-            ))
+            )
+            entities.append(s2)
 
             # 3. Exported Energy
-            entities.append(SolarSavingsEnergyAccumulator(
+            s3 = SolarSavingsEnergyAccumulator(
                 hass, entry.entry_id, f"{period_name} Exported Energy", f"{period_key}_exported_energy", 
                 exp_entity, "mdi:transmission-tower-export", period_key, init_exp
-            ))
+            )
+            entities.append(s3)
 
             # 4. Self Consumed Energy
-            entities.append(SolarSavingsSelfConsumptionSensor(
+            s4 = SolarSavingsSelfConsumptionSensor(
                 hass, entry.entry_id, f"{period_name} Self Consumed Energy", f"{period_key}_self_consumed",
                 gen_entity, exp_entity, period_key, init_self
-            ))
+            )
+            entities.append(s4)
 
             # 5. Import Cost ($)
-            entities.append(SolarSavingsFinancialAccumulator(
+            s5 = SolarSavingsFinancialAccumulator(
                 hass, entry.entry_id, f"{period_name} Import Cost", f"{period_key}_import_cost",
                 imp_entity, active_schedule, on_peak, off_peak, 0.0, "import", period_key, init_imp_cost
-            ))
+            )
+            entities.append(s5)
 
             # 6. Export Credit ($)
-            entities.append(SolarSavingsFinancialAccumulator(
+            s6 = SolarSavingsFinancialAccumulator(
                 hass, entry.entry_id, f"{period_name} Export Credit", f"{period_key}_export_credit",
                 exp_entity, active_schedule, on_peak, off_peak, export_rate, "export", period_key, init_exp_credit
-            ))
+            )
+            entities.append(s6)
 
             # 7. Solar Savings ($)
-            entities.append(SolarSavingsSavingsAccumulator(
+            s7 = SolarSavingsSavingsAccumulator(
                 hass, entry.entry_id, f"{period_name} Solar Savings", f"{period_key}_solar_savings",
                 gen_entity, exp_entity, active_schedule, on_peak, off_peak, export_rate, period_key, init_savings
-            ))
+            )
+            entities.append(s7)
 
             # 8. Self Consumption Savings ($)
-            entities.append(SolarSavingsSelfConsumptionFinancialAccumulator(
+            s8 = SolarSavingsSelfConsumptionFinancialAccumulator(
                 hass, entry.entry_id, f"{period_name} Self Consumption Savings", f"{period_key}_self_consumption_savings",
                 gen_entity, exp_entity, active_schedule, on_peak, off_peak, period_key, init_self_savings
-            ))
+            )
+            entities.append(s8)
+
+            # --- Create Derived Sensors (Yesterday & Rolling 30) for Daily metrics ---
+            if period_key == "daily":
+                daily_sensors = [s1, s2, s3, s4, s5, s6, s7, s8]
+                for parent in daily_sensors:
+                    # Create Yesterday Sensor
+                    y_name = parent.name.replace("Daily", "Yesterday")
+                    y_id = parent.unique_id.replace("daily_", "yesterday_")
+                    y_sensor = SolarSavingsHistorySensor(hass, entry.entry_id, y_name, y_id, parent, "yesterday")
+                    entities.append(y_sensor)
+                    parent.add_subscriber(y_sensor)
+
+                    # Create Rolling 30 Day Sensor
+                    r_name = parent.name.replace("Daily", "Last 30 Days")
+                    r_id = parent.unique_id.replace("daily_", "rolling_30_day_")
+                    r_sensor = SolarSavingsHistorySensor(hass, entry.entry_id, r_name, r_id, parent, "rolling_30")
+                    entities.append(r_sensor)
+                    parent.add_subscriber(r_sensor)
 
     async_add_entities(entities)
 
@@ -167,6 +195,46 @@ def get_current_import_rate_cents(hass, schedule_entity_id, on_peak_rate, off_pe
         return on_peak_rate
     return off_peak_rate
 
+
+# --- History Sensor ---
+class SolarSavingsHistorySensor(SensorEntity):
+    """Sensor that displays history (Yesterday or Rolling 30 Day) from a Daily parent."""
+    _attr_has_entity_name = True
+
+    def __init__(self, hass, entry_id, name, unique_id, parent_sensor, mode):
+        self.hass = hass
+        self._entry_id = entry_id
+        self._attr_name = name
+        self._attr_unique_id = unique_id
+        self._parent = parent_sensor
+        self._mode = mode # 'yesterday' or 'rolling_30'
+        self._attr_native_value = 0.0
+        
+        # Inherit unit and class from parent
+        self._attr_device_class = parent_sensor.device_class
+        self._attr_native_unit_of_measurement = parent_sensor.native_unit_of_measurement
+        self._attr_suggested_display_precision = parent_sensor.suggested_display_precision
+        self._attr_icon = parent_sensor.icon.replace("calendar-today", "calendar-arrow-left") if parent_sensor.icon else "mdi:history"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry_id)},
+            name="Solar Savings",
+            manufacturer="Solar Savings Integration",
+            model="Savings Calculator",
+        )
+
+    def update_from_history(self, history_list):
+        """Called by parent when history updates."""
+        if not history_list:
+            self._attr_native_value = 0.0
+        elif self._mode == "yesterday":
+            self._attr_native_value = history_list[-1]
+        elif self._mode == "rolling_30":
+            self._attr_native_value = sum(history_list)
+        
+        self.async_write_ha_state()
 
 # --- Base Class for Accumulators ---
 class SolarSavingsAccumulator(RestoreSensor):
@@ -188,6 +256,13 @@ class SolarSavingsAccumulator(RestoreSensor):
         self._accumulated_delta = 0.0 # Tracks what this sensor has measured itself
         self._last_source_value = None
         self._last_reset = dt_util.now()
+        
+        # History Tracking
+        self._daily_history = [] # Stores last 30 days of totals
+        self._subscribers = []
+
+    def add_subscriber(self, sensor):
+        self._subscribers.append(sensor)
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -201,11 +276,14 @@ class SolarSavingsAccumulator(RestoreSensor):
     @property
     def extra_state_attributes(self):
         """Return the state attributes."""
-        return {
+        attrs = {
             "last_reset": self._last_reset.isoformat(),
-            "initial_offset": self._initial_value, # Store this to detect config changes
-            "accumulated_delta": self._accumulated_delta # Store raw tracked amount
+            "initial_offset": self._initial_value,
+            "accumulated_delta": self._accumulated_delta
         }
+        if self._period == "daily":
+            attrs["daily_history"] = self._daily_history
+        return attrs
 
     async def async_added_to_hass(self) -> None:
         """Handle entity which will be added."""
@@ -215,24 +293,31 @@ class SolarSavingsAccumulator(RestoreSensor):
         state = await self.async_get_last_state()
         if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             try:
-                # We prioritize restoring the raw 'accumulated_delta' if available
-                # If not (first time upgrading to this version), we try to infer it.
                 if "accumulated_delta" in state.attributes:
                     self._accumulated_delta = float(state.attributes["accumulated_delta"])
                 else:
-                    # Fallback for existing installs: Assume current value is the delta
-                    # (Since previous version didn't have initial_value)
                     self._accumulated_delta = float(state.state)
 
-                # Restore reset date
                 if "last_reset" in state.attributes:
                     self._last_reset = dt_util.parse_datetime(state.attributes["last_reset"])
+                
+                if "daily_history" in state.attributes:
+                    self._daily_history = state.attributes["daily_history"]
                     
             except ValueError:
                 self._accumulated_delta = 0.0
 
+        # Update subscribers with restored history
+        if self._period == "daily":
+            for sub in self._subscribers:
+                sub.update_from_history(self._daily_history)
+            
+            # Add midnight check for Daily sensors
+            self.async_on_remove(
+                async_track_time_change(self.hass, self._force_midnight_check, hour=0, minute=0, second=1)
+            )
+
         # 2. Calculate Final Value
-        # Total = (Tracked Delta) + (Configured Initial Value)
         self._attr_native_value = self._accumulated_delta + self._initial_value
 
         # Check for reset immediately on startup
@@ -252,6 +337,12 @@ class SolarSavingsAccumulator(RestoreSensor):
                 self.hass, [self._source_entity_id], self._handle_state_change
             )
         )
+    
+    @callback
+    def _force_midnight_check(self, now):
+        """Forces a reset check at midnight."""
+        self._check_reset()
+        self.async_write_ha_state()
 
     def _check_reset(self):
         """Check if we need to reset based on period."""
@@ -272,8 +363,25 @@ class SolarSavingsAccumulator(RestoreSensor):
                 reset = True
         
         if reset:
+            # For Daily sensors, archive the history
+            if self._period == "daily":
+                final_val = self._accumulated_delta # Daily sensors ignore initial_value usually, or we include it? 
+                # Daily sensors usually start at 0. initial_value is for All Time.
+                # But just in case initial_value was applied to daily (unlikely), we use native_value.
+                # However, for consistency, let's use the displayed value.
+                final_val = self._attr_native_value 
+                
+                self._daily_history.append(final_val)
+                # Keep last 30 days
+                if len(self._daily_history) > 30:
+                    self._daily_history.pop(0)
+                
+                # Notify subscribers
+                for sub in self._subscribers:
+                    sub.update_from_history(self._daily_history)
+
             self._accumulated_delta = 0.0 # Reset tracked amount
-            self._attr_native_value = self._initial_value # Reset to offset (usually 0 for periodic)
+            self._attr_native_value = self._initial_value if self._period == "total" else 0.0
             self._last_reset = now
 
     def _handle_state_change(self, event):
@@ -400,6 +508,13 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
 
         self._last_gen_val = None
         self._last_exp_val = None
+        
+        # History
+        self._daily_history = []
+        self._subscribers = []
+
+    def add_subscriber(self, sensor):
+        self._subscribers.append(sensor)
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -413,11 +528,14 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
     @property
     def extra_state_attributes(self):
         """Return the state attributes."""
-        return {
+        attrs = {
             "last_reset": self._last_reset.isoformat(),
             "initial_offset": self._initial_value,
             "accumulated_delta": self._accumulated_delta
         }
+        if self._period == "daily":
+            attrs["daily_history"] = self._daily_history
+        return attrs
 
     async def async_added_to_hass(self) -> None:
         """Handle addition."""
@@ -434,8 +552,20 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
 
                 if "last_reset" in state.attributes:
                     self._last_reset = dt_util.parse_datetime(state.attributes["last_reset"])
+                
+                if "daily_history" in state.attributes:
+                    self._daily_history = state.attributes["daily_history"]
             except ValueError:
                 self._accumulated_delta = 0.0
+        
+        # Update subscribers
+        if self._period == "daily":
+            for sub in self._subscribers:
+                sub.update_from_history(self._daily_history)
+            
+            self.async_on_remove(
+                async_track_time_change(self.hass, self._force_midnight_check, hour=0, minute=0, second=1)
+            )
         
         # Calculate
         self._attr_native_value = self._accumulated_delta + self._initial_value
@@ -460,6 +590,11 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
                 setattr(self, attr_name, float(state.state))
             except ValueError:
                 setattr(self, attr_name, None)
+
+    @callback
+    def _force_midnight_check(self, now):
+        self._check_reset()
+        self.async_write_ha_state()
     
     def _check_reset(self):
         """Check if we need to reset based on period."""
@@ -480,8 +615,16 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
                 reset = True
         
         if reset:
+            if self._period == "daily":
+                final_val = self._attr_native_value
+                self._daily_history.append(final_val)
+                if len(self._daily_history) > 30:
+                    self._daily_history.pop(0)
+                for sub in self._subscribers:
+                    sub.update_from_history(self._daily_history)
+
             self._accumulated_delta = 0.0
-            self._attr_native_value = self._initial_value # Should be 0 for periodic
+            self._attr_native_value = self._initial_value if self._period == "total" else 0.0
             self._last_reset = now
 
     def _handle_change(self, event):
@@ -561,6 +704,13 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
         self._last_gen_val = None
         self._last_exp_val = None
 
+        # History
+        self._daily_history = []
+        self._subscribers = []
+
+    def add_subscriber(self, sensor):
+        self._subscribers.append(sensor)
+
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
@@ -572,11 +722,14 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
     
     @property
     def extra_state_attributes(self):
-        return {
+        attrs = {
             "last_reset": self._last_reset.isoformat(),
             "initial_offset": self._initial_value,
             "accumulated_delta": self._accumulated_delta
         }
+        if self._period == "daily":
+            attrs["daily_history"] = self._daily_history
+        return attrs
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -590,8 +743,18 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
 
                 if "last_reset" in state.attributes:
                     self._last_reset = dt_util.parse_datetime(state.attributes["last_reset"])
+                
+                if "daily_history" in state.attributes:
+                    self._daily_history = state.attributes["daily_history"]
             except ValueError:
                 self._accumulated_delta = 0.0
+        
+        if self._period == "daily":
+            for sub in self._subscribers:
+                sub.update_from_history(self._daily_history)
+            self.async_on_remove(
+                async_track_time_change(self.hass, self._force_midnight_check, hour=0, minute=0, second=1)
+            )
         
         self._attr_native_value = self._accumulated_delta + self._initial_value
         self._check_reset()
@@ -613,6 +776,11 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
             except ValueError:
                 setattr(self, attr_name, None)
 
+    @callback
+    def _force_midnight_check(self, now):
+        self._check_reset()
+        self.async_write_ha_state()
+
     def _check_reset(self):
         if self._period == "total": return
         now = dt_util.now()
@@ -622,8 +790,16 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
         elif self._period == "yearly" and now.year != self._last_reset.year: reset = True
         
         if reset:
+            if self._period == "daily":
+                final_val = self._attr_native_value
+                self._daily_history.append(final_val)
+                if len(self._daily_history) > 30:
+                    self._daily_history.pop(0)
+                for sub in self._subscribers:
+                    sub.update_from_history(self._daily_history)
+
             self._accumulated_delta = 0.0
-            self._attr_native_value = self._initial_value
+            self._attr_native_value = self._initial_value if self._period == "total" else 0.0
             self._last_reset = now
 
     def _handle_change(self, event):
@@ -682,6 +858,13 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
         self._last_exp = None
         self._last_reset = dt_util.now()
 
+        # History
+        self._daily_history = []
+        self._subscribers = []
+
+    def add_subscriber(self, sensor):
+        self._subscribers.append(sensor)
+
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
@@ -693,11 +876,14 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
 
     @property
     def extra_state_attributes(self):
-        return {
+        attrs = {
             "last_reset": self._last_reset.isoformat(),
             "initial_offset": self._initial_value,
             "accumulated_delta": self._accumulated_delta
         }
+        if self._period == "daily":
+            attrs["daily_history"] = self._daily_history
+        return attrs
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -711,8 +897,18 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
 
                 if "last_reset" in state.attributes:
                     self._last_reset = dt_util.parse_datetime(state.attributes["last_reset"])
+
+                if "daily_history" in state.attributes:
+                    self._daily_history = state.attributes["daily_history"]
             except ValueError:
                 self._accumulated_delta = 0.0
+        
+        if self._period == "daily":
+            for sub in self._subscribers:
+                sub.update_from_history(self._daily_history)
+            self.async_on_remove(
+                async_track_time_change(self.hass, self._force_midnight_check, hour=0, minute=0, second=1)
+            )
         
         self._attr_native_value = self._accumulated_delta + self._initial_value
         self._check_reset()
@@ -734,6 +930,11 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
             except ValueError:
                 pass
 
+    @callback
+    def _force_midnight_check(self, now):
+        self._check_reset()
+        self.async_write_ha_state()
+
     def _check_reset(self):
         if self._period == "total": return
         now = dt_util.now()
@@ -743,8 +944,16 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
         elif self._period == "yearly" and now.year != self._last_reset.year: reset = True
         
         if reset:
+            if self._period == "daily":
+                final_val = self._attr_native_value
+                self._daily_history.append(final_val)
+                if len(self._daily_history) > 30:
+                    self._daily_history.pop(0)
+                for sub in self._subscribers:
+                    sub.update_from_history(self._daily_history)
+
             self._accumulated_delta = 0.0
-            self._attr_native_value = self._initial_value
+            self._attr_native_value = self._initial_value if self._period == "total" else 0.0
             self._last_reset = now
 
     def _handle_change(self, event):
