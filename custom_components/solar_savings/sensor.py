@@ -225,6 +225,13 @@ class SolarSavingsHistorySensor(SensorEntity):
             model="Savings Calculator",
         )
 
+    async def async_added_to_hass(self) -> None:
+        """Handle startup."""
+        await super().async_added_to_hass()
+        # Initialize with current data from parent
+        if hasattr(self._parent, "get_daily_history"):
+             self.update_from_history(self._parent.get_daily_history())
+
     def update_from_history(self, history_list):
         """Called by parent when history updates."""
         if not history_list:
@@ -234,7 +241,9 @@ class SolarSavingsHistorySensor(SensorEntity):
         elif self._mode == "rolling_30":
             self._attr_native_value = sum(history_list)
         
-        self.async_write_ha_state()
+        # Safe update check
+        if self.entity_id:
+            self.async_write_ha_state()
 
 # --- Base Class for Accumulators ---
 class SolarSavingsAccumulator(RestoreSensor):
@@ -263,6 +272,9 @@ class SolarSavingsAccumulator(RestoreSensor):
 
     def add_subscriber(self, sensor):
         self._subscribers.append(sensor)
+    
+    def get_daily_history(self):
+        return self._daily_history
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -306,13 +318,13 @@ class SolarSavingsAccumulator(RestoreSensor):
                     
             except ValueError:
                 self._accumulated_delta = 0.0
-
-        # Update subscribers with restored history
+        
+        # Initialize subscribers (but don't force write state if they aren't added yet)
         if self._period == "daily":
-            for sub in self._subscribers:
-                sub.update_from_history(self._daily_history)
-            
-            # Add midnight check for Daily sensors
+             # We rely on subscribers pulling data in THEIR async_added_to_hass
+             # But if we updated right now (reset check below), we need to push.
+             
+             # Add midnight check for Daily sensors
             self.async_on_remove(
                 async_track_time_change(self.hass, self._force_midnight_check, hour=0, minute=0, second=1)
             )
@@ -365,11 +377,8 @@ class SolarSavingsAccumulator(RestoreSensor):
         if reset:
             # For Daily sensors, archive the history
             if self._period == "daily":
-                final_val = self._accumulated_delta # Daily sensors ignore initial_value usually, or we include it? 
-                # Daily sensors usually start at 0. initial_value is for All Time.
-                # But just in case initial_value was applied to daily (unlikely), we use native_value.
-                # However, for consistency, let's use the displayed value.
-                final_val = self._attr_native_value 
+                # Ensure we archive the *current* state before resetting
+                final_val = self._accumulated_delta + self._initial_value 
                 
                 self._daily_history.append(final_val)
                 # Keep last 30 days
@@ -515,6 +524,9 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
 
     def add_subscriber(self, sensor):
         self._subscribers.append(sensor)
+    
+    def get_daily_history(self):
+        return self._daily_history
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -560,9 +572,6 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
         
         # Update subscribers
         if self._period == "daily":
-            for sub in self._subscribers:
-                sub.update_from_history(self._daily_history)
-            
             self.async_on_remove(
                 async_track_time_change(self.hass, self._force_midnight_check, hour=0, minute=0, second=1)
             )
@@ -616,7 +625,7 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
         
         if reset:
             if self._period == "daily":
-                final_val = self._attr_native_value
+                final_val = self._accumulated_delta + self._initial_value
                 self._daily_history.append(final_val)
                 if len(self._daily_history) > 30:
                     self._daily_history.pop(0)
@@ -710,6 +719,9 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
 
     def add_subscriber(self, sensor):
         self._subscribers.append(sensor)
+    
+    def get_daily_history(self):
+        return self._daily_history
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -750,8 +762,6 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
                 self._accumulated_delta = 0.0
         
         if self._period == "daily":
-            for sub in self._subscribers:
-                sub.update_from_history(self._daily_history)
             self.async_on_remove(
                 async_track_time_change(self.hass, self._force_midnight_check, hour=0, minute=0, second=1)
             )
@@ -864,6 +874,9 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
 
     def add_subscriber(self, sensor):
         self._subscribers.append(sensor)
+    
+    def get_daily_history(self):
+        return self._daily_history
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -904,8 +917,6 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
                 self._accumulated_delta = 0.0
         
         if self._period == "daily":
-            for sub in self._subscribers:
-                sub.update_from_history(self._daily_history)
             self.async_on_remove(
                 async_track_time_change(self.hass, self._force_midnight_check, hour=0, minute=0, second=1)
             )
