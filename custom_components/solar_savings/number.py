@@ -38,7 +38,7 @@ class SolarSavingsRateNumber(NumberEntity):
     _attr_mode = NumberMode.BOX 
     _attr_native_min_value = 0.0
     _attr_native_max_value = 1000.0
-    _attr_native_step = 0.001
+    _attr_native_step = 0.0001
     _attr_native_unit_of_measurement = "c/kWh"
     _attr_device_class = NumberDeviceClass.MONETARY
     _attr_icon = "mdi:currency-usd"

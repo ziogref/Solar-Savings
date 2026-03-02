@@ -1039,24 +1039,27 @@ class SolarSavingsRateSensor(SensorEntity):
         )
 
 
-class SolarSavingsExportSensor(SensorEntity):
+class SolarSavingsCurrentRateSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:home-export-outline"
+    _attr_icon = "mdi:cash-fast"
 
-    def __init__(self, hass: HomeAssistant, name: str, value: float, entry_id: str, unique_suffix: str, mode: str) -> None:
-        self._attr_name = name
+    def __init__(self, hass, entry_id, schedule_entity_id, on_peak, off_peak, name, unique_suffix, mode) -> None:
+        self.hass = hass
         self._entry_id = entry_id
+        self._schedule_entity_id = schedule_entity_id
+        self._on_peak = on_peak
+        self._off_peak = off_peak
+        self._mode = mode
+        self._attr_name = name
         self._attr_unique_id = f"{entry_id}_{unique_suffix}"
-        if mode == "dollars":
+        if self._mode == "dollars":
             currency = hass.config.currency
             self._attr_native_unit_of_measurement = f"{currency}/kWh"
-            self._attr_native_value = value / 100.0
-            self._attr_suggested_display_precision = 4
+            self._attr_suggested_display_precision = 6  # Changed from 4 to 6
         else:
             self._attr_native_unit_of_measurement = "c/kWh"
-            self._attr_native_value = value
-            self._attr_suggested_display_precision = 2
+            self._attr_suggested_display_precision = 4  # Changed from 2 to 4
 
     @property
     def device_info(self) -> DeviceInfo:
