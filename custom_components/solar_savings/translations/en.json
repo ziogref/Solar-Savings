@@ -13,6 +13,14 @@
           "off_peak_rate": "Off Peak Rate (c/kWh)",
           "export_rate": "Export Rate (c/kWh)"
         }
+      },
+      "roi": {
+        "title": "Solar ROI (Optional)",
+        "description": "Calculate your Return on Investment. Leave blank if you do not want these sensors.",
+        "data": {
+          "system_cost": "Cost of Solar System ($)",
+          "pto_date": "Permission to Operate Date"
+        }
       }
     },
     "error": {},
@@ -32,6 +40,14 @@
           "on_peak_rate": "On Peak Rate (c/kWh)",
           "off_peak_rate": "Off Peak Rate (c/kWh)",
           "export_rate": "Export Rate (c/kWh)"
+        }
+      },
+      "roi": {
+        "title": "Solar ROI (Optional)",
+        "description": "Calculate your Return on Investment. Leave blank if you do not want these sensors.",
+        "data": {
+          "system_cost": "Cost of Solar System ($)",
+          "pto_date": "Permission to Operate Date"
         }
       },
       "history": {

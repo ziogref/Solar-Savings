@@ -13,6 +13,10 @@ CONF_SOLAR_GENERATION_ENTITY = "solar_generation_entity"
 CONF_GRID_IMPORT_ENTITY = "grid_import_entity"
 CONF_GRID_EXPORT_ENTITY = "grid_export_entity"
 
+# ROI Inputs (Optional)
+CONF_SYSTEM_COST = "system_cost"
+CONF_PTO_DATE = "pto_date"
+
 # Historical / Initial Values (Optional)
 CONF_INITIAL_GENERATION = "initial_generation"
 CONF_INITIAL_IMPORT = "initial_import"
