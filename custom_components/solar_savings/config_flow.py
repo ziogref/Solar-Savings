@@ -35,7 +35,7 @@ class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self):
         """Initialize the config flow."""
-        self.init_data = {}
+        self._user_data = {}
 
     @staticmethod
     @callback
@@ -48,7 +48,7 @@ class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            self.init_data = user_input
+            self._user_data = user_input
             return await self.async_step_roi()
 
         # Define the form schema
@@ -81,10 +81,10 @@ class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_roi(self, user_input=None):
         """Handle the second step for ROI calculation."""
         if user_input is not None:
-            self.init_data.update(user_input)
+            self._user_data.update(user_input)
             return self.async_create_entry(
                 title="Solar Savings", 
-                data=self.init_data
+                data=self._user_data
             )
 
         data_schema = vol.Schema(
