@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from datetime import date
 from homeassistant.components.sensor import (
     SensorEntity,
@@ -205,10 +206,6 @@ async def async_setup_entry(
                 s_rem_roi = SolarSavingsROISensor(hass, entry.entry_id, "Remaining Solar ROI", "remaining_solar_roi", pto_date_str, system_cost, total_savings_sensor, "remaining_roi")
 
                 entities.extend([s_days, s_tot_roi, s_rem_roi])
-
-                total_savings_sensor.add_roi_subscriber(s_days)
-                total_savings_sensor.add_roi_subscriber(s_tot_roi)
-                total_savings_sensor.add_roi_subscriber(s_rem_roi)
             except ValueError:
                 _LOGGER.error("Solar Savings: Invalid PTO Date format provided.")
 
@@ -554,19 +551,9 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
         # History
         self._daily_history = []
         self._subscribers = []
-        self._roi_subscribers = []
 
     def add_subscriber(self, sensor):
         self._subscribers.append(sensor)
-        
-    def add_roi_subscriber(self, sensor):
-        """Add ROI sensor that needs to be updated upon savings changing."""
-        self._roi_subscribers.append(sensor)
-        
-    def _notify_roi_subscribers(self):
-        """Update ROI sensors after writing our own state."""
-        for sub in self._roi_subscribers:
-            sub.update_from_parent()
     
     def get_daily_history(self):
         return self._daily_history
@@ -721,7 +708,6 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
         
         self._attr_native_value = self._accumulated_delta + self._initial_value
         self.async_write_ha_state()
-        self._notify_roi_subscribers()
 
 
 class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
@@ -1055,7 +1041,7 @@ class SolarSavingsROISensor(SensorEntity):
         self._parent = parent_sensor
         self._sensor_type = sensor_type # 'days', 'total_roi', 'remaining_roi'
 
-        self._attr_native_unit_of_measurement = "d"
+        self._attr_native_unit_of_measurement = "days"
 
         if sensor_type == "days":
             self._attr_icon = "mdi:calendar-star"
@@ -1085,18 +1071,18 @@ class SolarSavingsROISensor(SensorEntity):
         if avg_daily_savings <= 0:
             return None
 
-        total_roi_days = self._system_cost / avg_daily_savings
+        total_roi_days = math.ceil(self._system_cost / avg_daily_savings)
 
         if self._sensor_type == "total_roi":
-            return round(total_roi_days, 1)
+            return total_roi_days
 
         if self._sensor_type == "remaining_roi":
-            return round(max(0, total_roi_days - days_on_solar), 1)
+            return math.ceil(max(0, total_roi_days - days_on_solar))
 
     async def async_added_to_hass(self):
         """Handle addition."""
         await super().async_added_to_hass()
-        # Keep days tracked properly exactly on midnight roll-over
+        # Ensure ROI only updates/writes state exactly once per day at midnight
         self.async_on_remove(
             async_track_time_change(self.hass, self._force_midnight_check, hour=0, minute=0, second=1)
         )
@@ -1104,11 +1090,6 @@ class SolarSavingsROISensor(SensorEntity):
     @callback
     def _force_midnight_check(self, now):
         """Force write state when a new day rolls over."""
-        self.async_write_ha_state()
-
-    @callback
-    def update_from_parent(self):
-        """Called by the parent Total Savings sensor when it updates."""
         self.async_write_ha_state()
 
     @property
