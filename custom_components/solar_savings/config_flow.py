@@ -82,10 +82,7 @@ class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the second step for ROI calculation."""
         if user_input is not None:
             self._user_data.update(user_input)
-            return self.async_create_entry(
-                title="Solar Savings", 
-                data=self._user_data
-            )
+            return await self.async_step_history()
 
         data_schema = vol.Schema(
             {
@@ -95,6 +92,29 @@ class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         return self.async_show_form(step_id="roi", data_schema=data_schema)
+
+    async def async_step_history(self, user_input=None):
+        """Handle the third step for historical data during initial setup."""
+        if user_input is not None:
+            self._user_data.update(user_input)
+            return self.async_create_entry(
+                title="Solar Savings", 
+                data=self._user_data
+            )
+
+        data_schema = vol.Schema({
+            vol.Optional(CONF_INITIAL_GENERATION, default=0.0): vol.Coerce(float),
+            vol.Optional(CONF_INITIAL_IMPORT, default=0.0): vol.Coerce(float),
+            vol.Optional(CONF_INITIAL_EXPORT, default=0.0): vol.Coerce(float),
+            vol.Optional(CONF_INITIAL_SELF_CONSUMED, default=0.0): vol.Coerce(float),
+            
+            vol.Optional(CONF_INITIAL_IMPORT_COST, default=0.0): vol.Coerce(float),
+            vol.Optional(CONF_INITIAL_EXPORT_CREDIT, default=0.0): vol.Coerce(float),
+            vol.Optional(CONF_INITIAL_SELF_CONSUMED_SAVINGS, default=0.0): vol.Coerce(float),
+            vol.Optional(CONF_INITIAL_SAVINGS, default=0.0): vol.Coerce(float),
+        })
+
+        return self.async_show_form(step_id="history", data_schema=data_schema)
 
 class SolarSavingsOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for Solar Savings."""
