@@ -101,7 +101,7 @@ class SolarSavingsOptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry):
         """Initialize options flow."""
-        self.config_entry = config_entry
+        self._config_entry = config_entry
         self.user_input_init = {}
         self.user_input_roi = {}
 
@@ -114,7 +114,7 @@ class SolarSavingsOptionsFlowHandler(config_entries.OptionsFlow):
 
         # Helper to get current value safely
         def get_current(key, default=None):
-            val = self.config_entry.options.get(key, self.config_entry.data.get(key, default))
+            val = self._config_entry.options.get(key, self._config_entry.data.get(key, default))
             return val if val is not None else default
 
         curr_gen = get_current(CONF_SOLAR_GENERATION_ENTITY)
@@ -154,7 +154,7 @@ class SolarSavingsOptionsFlowHandler(config_entries.OptionsFlow):
             return await self.async_step_history()
             
         def get_current(key, default=None):
-            val = self.config_entry.options.get(key, self.config_entry.data.get(key, default))
+            val = self._config_entry.options.get(key, self._config_entry.data.get(key, default))
             return val if val is not None else default
             
         curr_cost = get_current(CONF_SYSTEM_COST)
@@ -182,7 +182,7 @@ class SolarSavingsOptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=final_data)
 
         def get_current(key, default=0.0):
-            val = self.config_entry.options.get(key, self.config_entry.data.get(key, default))
+            val = self._config_entry.options.get(key, self._config_entry.data.get(key, default))
             return val if val is not None else default
 
         schema = vol.Schema({
