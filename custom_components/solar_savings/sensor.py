@@ -38,6 +38,8 @@ from .const import (
     CONF_INITIAL_EXPORT_CREDIT,
     CONF_INITIAL_SELF_CONSUMED_SAVINGS,
     CONF_INITIAL_SAVINGS,
+    CONF_INITIAL_SAVINGS,
+    CONF_WIPE_DATA,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,6 +56,10 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    
+    # Retrieve wipe_data flag from hass.data
+    wipe_data = hass.data[DOMAIN].get(entry.entry_id, {}).get("wipe_data", False)
+
     """Set up the Solar Savings sensors."""
     
     # Configuration
@@ -117,49 +123,49 @@ async def async_setup_entry(
             # 1. Generated Energy
             s1 = SolarSavingsEnergyAccumulator(
                 hass, entry.entry_id, f"{period_name} Generated Energy", f"{period_key}_generated_energy", 
-                gen_entity, "mdi:solar-power", period_key, init_gen
+                gen_entity, "mdi:solar-power", period_key, init_gen, wipe_data
             )
             entities.append(s1)
 
             # 2. Imported Energy
             s2 = SolarSavingsEnergyAccumulator(
                 hass, entry.entry_id, f"{period_name} Imported Energy", f"{period_key}_imported_energy", 
-                imp_entity, "mdi:transmission-tower-import", period_key, init_imp
+                imp_entity, "mdi:transmission-tower-import", period_key, init_imp, wipe_data
             )
             entities.append(s2)
 
             # 3. Exported Energy
             s3 = SolarSavingsEnergyAccumulator(
                 hass, entry.entry_id, f"{period_name} Exported Energy", f"{period_key}_exported_energy", 
-                exp_entity, "mdi:transmission-tower-export", period_key, init_exp
+                exp_entity, "mdi:transmission-tower-export", period_key, init_exp, wipe_data
             )
             entities.append(s3)
 
             # 4. Self Consumed Energy
             s4 = SolarSavingsSelfConsumptionSensor(
                 hass, entry.entry_id, f"{period_name} Self Consumed Energy", f"{period_key}_self_consumed",
-                gen_entity, exp_entity, period_key, init_self
+                gen_entity, exp_entity, period_key, init_self, wipe_data
             )
             entities.append(s4)
 
             # 5. Import Cost ($)
             s5 = SolarSavingsFinancialAccumulator(
                 hass, entry.entry_id, f"{period_name} Import Cost", f"{period_key}_import_cost",
-                imp_entity, active_schedule, on_peak, off_peak, 0.0, "import", period_key, init_imp_cost
+                imp_entity, active_schedule, on_peak, off_peak, 0.0, "import", period_key, init_imp_cost, wipe_data
             )
             entities.append(s5)
 
             # 6. Export Credit ($)
             s6 = SolarSavingsFinancialAccumulator(
                 hass, entry.entry_id, f"{period_name} Export Credit", f"{period_key}_export_credit",
-                exp_entity, active_schedule, on_peak, off_peak, export_rate, "export", period_key, init_exp_credit
+                exp_entity, active_schedule, on_peak, off_peak, export_rate, "export", period_key, init_exp_credit, wipe_data
             )
             entities.append(s6)
 
             # 7. Solar Savings ($)
             s7 = SolarSavingsSavingsAccumulator(
                 hass, entry.entry_id, f"{period_name} Solar Savings", f"{period_key}_solar_savings",
-                gen_entity, exp_entity, active_schedule, on_peak, off_peak, export_rate, period_key, init_savings
+                gen_entity, exp_entity, active_schedule, on_peak, off_peak, export_rate, period_key, init_savings, wipe_data
             )
             entities.append(s7)
             
@@ -170,7 +176,7 @@ async def async_setup_entry(
             # 8. Self Consumption Savings ($)
             s8 = SolarSavingsSelfConsumptionFinancialAccumulator(
                 hass, entry.entry_id, f"{period_name} Self Consumption Savings", f"{period_key}_self_consumption_savings",
-                gen_entity, exp_entity, active_schedule, on_peak, off_peak, period_key, init_self_savings
+                gen_entity, exp_entity, active_schedule, on_peak, off_peak, period_key, init_self_savings, wipe_data
             )
             entities.append(s8)
 
@@ -281,7 +287,7 @@ class SolarSavingsAccumulator(RestoreSensor):
     _attr_has_entity_name = True
     _attr_state_class = SensorStateClass.TOTAL
     
-    def __init__(self, hass, entry_id, name, unique_suffix, source_entity_id, icon, period, initial_value=0.0):
+    def __init__(self, hass, entry_id, name, unique_suffix, source_entity_id, icon, period, initial_value=0.0, wipe_data=False):
         self.hass = hass
         self._entry_id = entry_id
         self._source_entity_id = source_entity_id
@@ -294,6 +300,7 @@ class SolarSavingsAccumulator(RestoreSensor):
         self._accumulated_delta = 0.0 # Tracks what this sensor has measured itself
         self._last_source_value = None
         self._last_reset = dt_util.now()
+        self._wipe_data = wipe_data
         
         # History Tracking
         self._daily_history = [] # Stores last 30 days of totals
@@ -327,26 +334,31 @@ class SolarSavingsAccumulator(RestoreSensor):
         return attrs
 
     async def async_added_to_hass(self) -> None:
-        """Handle entity which will be added."""
         await super().async_added_to_hass()
         
-        # 1. Restore previous state
-        state = await self.async_get_last_state()
-        if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-            try:
-                if "accumulated_delta" in state.attributes:
-                    self._accumulated_delta = float(state.attributes["accumulated_delta"])
-                else:
-                    self._accumulated_delta = float(state.state)
+        # 1. Restore previous state OR wipe
+        if not self._wipe_data:
+            state = await self.async_get_last_state()
+            if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+                try:
+                    if "accumulated_delta" in state.attributes:
+                        self._accumulated_delta = float(state.attributes["accumulated_delta"])
+                    else:
+                        self._accumulated_delta = float(state.state)
 
-                if "last_reset" in state.attributes:
-                    self._last_reset = dt_util.parse_datetime(state.attributes["last_reset"])
-                
-                if "daily_history" in state.attributes:
-                    self._daily_history = state.attributes["daily_history"]
+                    if "last_reset" in state.attributes:
+                        self._last_reset = dt_util.parse_datetime(state.attributes["last_reset"])
                     
-            except ValueError:
-                self._accumulated_delta = 0.0
+                    if "daily_history" in state.attributes:
+                        self._daily_history = state.attributes["daily_history"]
+                        
+                except ValueError:
+                    self._accumulated_delta = 0.0
+        else:
+            # Wiping requested! Reset all tracking variables
+            self._accumulated_delta = 0.0
+            self._daily_history = []
+            self._last_reset = dt_util.now()
         
         # Initialize subscribers (but don't force write state if they aren't added yet)
         if self._period == "daily":
@@ -474,8 +486,8 @@ class SolarSavingsEnergyAccumulator(SolarSavingsAccumulator):
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_suggested_display_precision = 2
 
-    def __init__(self, hass, entry_id, name, unique_suffix, source_entity_id, icon, period, initial_value=0.0):
-        super().__init__(hass, entry_id, name, unique_suffix, source_entity_id, icon, period, initial_value)
+    def __init__(self, hass, entry_id, name, unique_suffix, source_entity_id, icon, period, initial_value=0.0, wipe_data=False):
+        super().__init__(hass, entry_id, name, unique_suffix, source_entity_id, icon, period, initial_value, wipe_data)
 
     def _process_delta(self, delta):
         self._accumulated_delta += delta

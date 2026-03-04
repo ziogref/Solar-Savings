@@ -9,6 +9,7 @@ from homeassistant.helpers.event import async_track_time_change
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .const import DOMAIN, CONF_WIPE_DATA
 
 # Add SELECT to the supported platforms
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.NUMBER, Platform.DATE, Platform.SELECT]
@@ -17,6 +18,25 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Solar Savings from a config entry."""
+    
+    # Check if a wipe was requested from either data or options
+    wipe_data = entry.data.get(CONF_WIPE_DATA, False) or entry.options.get(CONF_WIPE_DATA, False)
+    
+    if wipe_data:
+        # Clear the flag from the entry so it only wipes exactly once, preventing boot-loops
+        new_data = dict(entry.data)
+        if CONF_WIPE_DATA in new_data:
+            new_data[CONF_WIPE_DATA] = False
+            
+        new_options = dict(entry.options)
+        if CONF_WIPE_DATA in new_options:
+            new_options[CONF_WIPE_DATA] = False
+            
+        hass.config_entries.async_update_entry(entry, data=new_data, options=new_options)
+        
+    # Store the flag in runtime memory to hand off to sensor.py
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = {"wipe_data": wipe_data}
     
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -90,7 +110,10 @@ async def apply_scheduled_rates(hass: HomeAssistant, entry: ConfigEntry):
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        hass.data[DOMAIN].pop(entry.entry_id, None) # Cleanup memory
+    return unload_ok
 
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:

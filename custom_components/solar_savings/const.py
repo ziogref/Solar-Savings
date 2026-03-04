@@ -27,3 +27,5 @@ CONF_INITIAL_IMPORT_COST = "initial_import_cost"
 CONF_INITIAL_EXPORT_CREDIT = "initial_export_credit"
 CONF_INITIAL_SELF_CONSUMED_SAVINGS = "initial_self_consumed_savings"
 CONF_INITIAL_SAVINGS = "initial_savings"
+
+CONF_WIPE_DATA = "wipe_data"

@@ -26,6 +26,7 @@
         "title": "Import Historical Data",
         "description": "Add your existing historical totals here. These will be added to the 'All Time' sensors.",
         "data": {
+          "wipe_data": "Wipe previous data and start fresh",
           "initial_generation": "Historical Solar Generation (kWh)",
           "initial_import": "Historical Electricity Purchased (kWh)",
           "initial_export": "Historical Electricity Sold (kWh)",
@@ -68,6 +69,7 @@
         "title": "Import Historical Data",
         "description": "Add your existing historical totals here. These will be added to the 'All Time' sensors.",
         "data": {
+          "wipe_data": "Wipe previous data and start fresh",
           "initial_generation": "Historical Solar Generation (kWh)",
           "initial_import": "Historical Electricity Purchased (kWh)",
           "initial_export": "Historical Electricity Sold (kWh)",

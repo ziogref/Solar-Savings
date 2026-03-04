@@ -26,6 +26,7 @@ from .const import (
     CONF_INITIAL_EXPORT_CREDIT,
     CONF_INITIAL_SELF_CONSUMED_SAVINGS,
     CONF_INITIAL_SAVINGS,
+    CONF_WIPE_DATA,
 )
 
 class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -103,6 +104,7 @@ class SolarSavingsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         data_schema = vol.Schema({
+            vol.Optional(CONF_WIPE_DATA, default=False): bool,
             vol.Optional(CONF_INITIAL_GENERATION, default=0.0): vol.Coerce(float),
             vol.Optional(CONF_INITIAL_IMPORT, default=0.0): vol.Coerce(float),
             vol.Optional(CONF_INITIAL_EXPORT, default=0.0): vol.Coerce(float),
@@ -206,6 +208,7 @@ class SolarSavingsOptionsFlowHandler(config_entries.OptionsFlow):
             return val if val is not None else default
 
         schema = vol.Schema({
+            vol.Optional(CONF_WIPE_DATA, default=False): bool,
             vol.Optional(CONF_INITIAL_GENERATION, default=get_current(CONF_INITIAL_GENERATION)): vol.Coerce(float),
             vol.Optional(CONF_INITIAL_IMPORT, default=get_current(CONF_INITIAL_IMPORT)): vol.Coerce(float),
             vol.Optional(CONF_INITIAL_EXPORT, default=get_current(CONF_INITIAL_EXPORT)): vol.Coerce(float),
