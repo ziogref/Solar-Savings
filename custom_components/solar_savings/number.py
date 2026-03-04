@@ -63,11 +63,15 @@ class SolarSavingsRateNumber(NumberEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Return the current value from config options."""
-        return self._entry.options.get(
+        """Return the current value safely coerced from config options."""
+        val = self._entry.options.get(
             self._config_key, 
             self._entry.data.get(self._config_key, 0.0)
         )
+        try:
+            return float(val) if val is not None else 0.0
+        except (ValueError, TypeError):
+            return 0.0
 
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""

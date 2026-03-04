@@ -29,7 +29,7 @@ class SolarSavingsEffectiveDate(DateEntity):
     _attr_has_entity_name = True
     _attr_name = "Effective Date"
     _attr_icon = "mdi:calendar-clock"
-    _attr_entity_category = EntityCategory.CONFIG # Appears in Configuration section
+    _attr_entity_category = EntityCategory.CONFIG 
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the date entity."""
@@ -39,10 +39,13 @@ class SolarSavingsEffectiveDate(DateEntity):
 
     @property
     def native_value(self) -> date | None:
-        """Return the value of the date."""
+        """Return the value of the date safely."""
         date_str = self._entry.options.get("scheduled_date")
         if date_str:
-            return date.fromisoformat(date_str)
+            try:
+                return date.fromisoformat(date_str)
+            except ValueError:
+                return None
         return None
 
     async def async_set_value(self, value: date) -> None:
