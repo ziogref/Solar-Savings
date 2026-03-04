@@ -538,6 +538,7 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
         self._attr_unique_id = f"{entry_id}_{unique_suffix}"
         self._period = period
         self._initial_value = initial_value
+        self._wipe_data = wipe_data
         
         self._gen_entity = gen_entity
         self._exp_entity = exp_entity
@@ -586,23 +587,28 @@ class SolarSavingsSavingsAccumulator(RestoreSensor):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         
-        state = await self.async_get_last_state()
-        if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-            try:
-                if "accumulated_delta" in state.attributes:
-                    self._accumulated_delta = float(state.attributes["accumulated_delta"])
-                else:
-                    self._accumulated_delta = float(state.state)
+        if not self._wipe_data:
+            state = await self.async_get_last_state()
+            if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+                try:
+                    if "accumulated_delta" in state.attributes:
+                        self._accumulated_delta = float(state.attributes["accumulated_delta"])
+                    else:
+                        self._accumulated_delta = float(state.state)
 
-                if "last_reset" in state.attributes:
-                    parsed_reset = dt_util.parse_datetime(str(state.attributes["last_reset"]))
-                    if parsed_reset is not None:
-                        self._last_reset = parsed_reset
-                
-                if "daily_history" in state.attributes:
-                    self._daily_history = state.attributes["daily_history"]
-            except (ValueError, TypeError):
-                self._accumulated_delta = 0.0
+                    if "last_reset" in state.attributes:
+                        parsed_reset = dt_util.parse_datetime(str(state.attributes["last_reset"]))
+                        if parsed_reset is not None:
+                            self._last_reset = parsed_reset
+                    
+                    if "daily_history" in state.attributes:
+                        self._daily_history = state.attributes["daily_history"]
+                except (ValueError, TypeError):
+                    self._accumulated_delta = 0.0
+        else:
+            self._accumulated_delta = 0.0
+            self._daily_history = []
+            self._last_reset = dt_util.now()
         
         if self._period == "daily":
             self.async_on_remove(
@@ -720,6 +726,7 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
         self._attr_unique_id = f"{entry_id}_{unique_suffix}"
         self._period = period
         self._initial_value = initial_value
+        self._wipe_data = wipe_data
         
         self._gen_entity = gen_entity
         self._exp_entity = exp_entity
@@ -766,23 +773,29 @@ class SolarSavingsSelfConsumptionFinancialAccumulator(RestoreSensor):
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        state = await self.async_get_last_state()
-        if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-            try:
-                if "accumulated_delta" in state.attributes:
-                    self._accumulated_delta = float(state.attributes["accumulated_delta"])
-                else:
-                    self._accumulated_delta = float(state.state)
+        
+        if not self._wipe_data:
+            state = await self.async_get_last_state()
+            if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+                try:
+                    if "accumulated_delta" in state.attributes:
+                        self._accumulated_delta = float(state.attributes["accumulated_delta"])
+                    else:
+                        self._accumulated_delta = float(state.state)
 
-                if "last_reset" in state.attributes:
-                    parsed_reset = dt_util.parse_datetime(str(state.attributes["last_reset"]))
-                    if parsed_reset is not None:
-                        self._last_reset = parsed_reset
-                
-                if "daily_history" in state.attributes:
-                    self._daily_history = state.attributes["daily_history"]
-            except (ValueError, TypeError):
-                self._accumulated_delta = 0.0
+                    if "last_reset" in state.attributes:
+                        parsed_reset = dt_util.parse_datetime(str(state.attributes["last_reset"]))
+                        if parsed_reset is not None:
+                            self._last_reset = parsed_reset
+                    
+                    if "daily_history" in state.attributes:
+                        self._daily_history = state.attributes["daily_history"]
+                except (ValueError, TypeError):
+                    self._accumulated_delta = 0.0
+        else:
+            self._accumulated_delta = 0.0
+            self._daily_history = []
+            self._last_reset = dt_util.now()
         
         if self._period == "daily":
             self.async_on_remove(
@@ -883,6 +896,7 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
         self._attr_unique_id = f"{entry_id}_{unique_suffix}"
         self._period = period
         self._initial_value = initial_value
+        self._wipe_data = wipe_data
         self._gen_entity = gen_entity_source
         self._exp_entity = exp_entity_source
         self._attr_native_value = 0.0
@@ -922,23 +936,29 @@ class SolarSavingsSelfConsumptionSensor(RestoreSensor):
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        state = await self.async_get_last_state()
-        if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-            try:
-                if "accumulated_delta" in state.attributes:
-                    self._accumulated_delta = float(state.attributes["accumulated_delta"])
-                else:
-                    self._accumulated_delta = float(state.state)
+        
+        if not self._wipe_data:
+            state = await self.async_get_last_state()
+            if state and state.state not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+                try:
+                    if "accumulated_delta" in state.attributes:
+                        self._accumulated_delta = float(state.attributes["accumulated_delta"])
+                    else:
+                        self._accumulated_delta = float(state.state)
 
-                if "last_reset" in state.attributes:
-                    parsed_reset = dt_util.parse_datetime(str(state.attributes["last_reset"]))
-                    if parsed_reset is not None:
-                        self._last_reset = parsed_reset
+                    if "last_reset" in state.attributes:
+                        parsed_reset = dt_util.parse_datetime(str(state.attributes["last_reset"]))
+                        if parsed_reset is not None:
+                            self._last_reset = parsed_reset
 
-                if "daily_history" in state.attributes:
-                    self._daily_history = state.attributes["daily_history"]
-            except (ValueError, TypeError):
-                self._accumulated_delta = 0.0
+                    if "daily_history" in state.attributes:
+                        self._daily_history = state.attributes["daily_history"]
+                except (ValueError, TypeError):
+                    self._accumulated_delta = 0.0
+        else:
+            self._accumulated_delta = 0.0
+            self._daily_history = []
+            self._last_reset = dt_util.now()
         
         if self._period == "daily":
             self.async_on_remove(
