@@ -1296,13 +1296,13 @@ class SolarSavingsCurrentRateSensor(SensorEntity):
 
 class SolarSavingsROIFormattedSensor(SolarSavingsROISensor):
     """A human-readable formatted version of the ROI sensor (Years, Months, Days)."""
-    
-    _attr_state_class = None 
-    _attr_native_unit_of_measurement = None
 
     def __init__(self, hass, entry_id, name, unique_suffix, pto_date_str, system_cost, parent_sensor, sensor_type):
         super().__init__(hass, entry_id, name, unique_suffix, pto_date_str, system_cost, parent_sensor, sensor_type)
         self._attr_icon = "mdi:calendar-text"
+        # Overwrite the parent class's numeric restrictions so HA accepts strings
+        self._attr_native_unit_of_measurement = None
+        self._attr_state_class = None
 
     @property
     def native_value(self):
