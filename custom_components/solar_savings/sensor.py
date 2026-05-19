@@ -1,9 +1,10 @@
 """Sensor platform for Solar Savings."""
 from __future__ import annotations
 
+import calendar
 import logging
 import math
-from datetime import date
+from datetime import date, timedelta
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
@@ -231,7 +232,12 @@ async def async_setup_entry(
                 s_tot_roi = SolarSavingsROISensor(hass, entry.entry_id, "Total Solar ROI", "total_solar_roi", pto_date_str, system_cost, total_savings_sensor, "total_roi")
                 s_rem_roi = SolarSavingsROISensor(hass, entry.entry_id, "Remaining Solar ROI", "remaining_solar_roi", pto_date_str, system_cost, total_savings_sensor, "remaining_roi")
 
-                entities.extend([s_days, s_tot_roi, s_rem_roi])
+                # Formatted ROI sensors
+                s_days_fmt = SolarSavingsROIFormattedSensor(hass, entry.entry_id, "Days on Solar (Formatted)", "days_on_solar_fmt", pto_date_str, system_cost, total_savings_sensor, "days")
+                s_tot_roi_fmt = SolarSavingsROIFormattedSensor(hass, entry.entry_id, "Total Solar ROI (Formatted)", "total_solar_roi_fmt", pto_date_str, system_cost, total_savings_sensor, "total_roi")
+                s_rem_roi_fmt = SolarSavingsROIFormattedSensor(hass, entry.entry_id, "Remaining Solar ROI (Formatted)", "remaining_solar_roi_fmt", pto_date_str, system_cost, total_savings_sensor, "remaining_roi")
+
+                entities.extend([s_days, s_tot_roi, s_rem_roi, s_days_fmt, s_tot_roi_fmt, s_rem_roi_fmt])
             except ValueError:
                 _LOGGER.error("Solar Savings: Invalid PTO Date format provided.")
 
@@ -248,6 +254,42 @@ def get_current_import_rate_cents(hass, schedule_entity_id, on_peak_rate, off_pe
     if state and state.state == STATE_ON:
         return on_peak_rate
     return off_peak_rate
+
+
+# --- Helper Function for Date Formatting ---
+def days_to_ymd(start_date: date, total_days: int) -> str:
+    """Accurately calculates years, months, and days accounting for leap years."""
+    if total_days <= 0:
+        return "0 Days"
+        
+    end_date = start_date + timedelta(days=total_days)
+    
+    years = end_date.year - start_date.year
+    months = end_date.month - start_date.month
+    days = end_date.day - start_date.day
+    
+    # Adjust if days are negative
+    if days < 0:
+        months -= 1
+        prev_month = end_date.month - 1 if end_date.month > 1 else 12
+        prev_year = end_date.year if end_date.month > 1 else end_date.year - 1
+        days += calendar.monthrange(prev_year, prev_month)[1]
+        
+    # Adjust if months are negative
+    if months < 0:
+        years -= 1
+        months += 12
+        
+    # Format the output string
+    parts = []
+    if years > 0:
+        parts.append(f"{years} Year{'s' if years != 1 else ''}")
+    if months > 0:
+        parts.append(f"{months} Month{'s' if months != 1 else ''}")
+    if days > 0 or not parts:
+        parts.append(f"{days} Day{'s' if days != 1 else ''}")
+        
+    return ", ".join(parts)
 
 
 # --- History Sensor ---
@@ -1250,3 +1292,27 @@ class SolarSavingsCurrentRateSensor(SensorEntity):
             manufacturer="Solar Savings Integration",
             model="Savings Calculator",
         )
+
+
+class SolarSavingsROIFormattedSensor(SolarSavingsROISensor):
+    """A human-readable formatted version of the ROI sensor (Years, Months, Days)."""
+    
+    _attr_state_class = None 
+    _attr_native_unit_of_measurement = None
+
+    def __init__(self, hass, entry_id, name, unique_suffix, pto_date_str, system_cost, parent_sensor, sensor_type):
+        super().__init__(hass, entry_id, name, unique_suffix, pto_date_str, system_cost, parent_sensor, sensor_type)
+        self._attr_icon = "mdi:calendar-text"
+
+    @property
+    def native_value(self):
+        """Calculate the raw days from the parent class, then format them."""
+        raw_days = super().native_value
+        
+        if raw_days is None or not self._pto_date:
+            return None
+            
+        # For 'remaining_roi', the start date is 'now'. For the others, it's the PTO date.
+        start_calc_date = dt_util.now().date() if self._sensor_type == "remaining_roi" else self._pto_date
+        
+        return days_to_ymd(start_calc_date, int(raw_days))
